@@ -1,0 +1,34 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Rename binary
+        run: cp target/release/rmail-parser rmail-parser-linux-x86_64
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || 'latest' }}
+          name: ${{ github.ref_name || 'latest' }}
+          files: rmail-parser-linux-x86_64
+          generate_release_notes: true
+          make_latest: true

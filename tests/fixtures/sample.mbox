@@ -1,0 +1,33 @@
+From user1@example.com  Mon Feb  1 20:13:59 2026
+From: Ben Bolker <bbo|ker @end|ng |rom gm@||@com>
+Date: Sun, 1 Feb 2026 20:13:59 -0500
+Subject: [R] weighted.residuals()
+Message-ID: <msg001@example.com>
+Content-Type: text/plain; charset=UTF-8
+
+I noticed that weighted.residuals() doesn't handle
+the case where weights are all zero.
+
+Minimal example:
+  lm(y ~ x, weights = rep(0, 10))
+
+From user2@example.com  Mon Feb  2 12:28:38 2026
+From: Martin Maechler <m@ech|er @end|ng |rom @t@t@m@th@ethz@ch>
+Date: Mon, 2 Feb 2026 12:28:38 +0100
+Subject: Re: [R] weighted.residuals()
+Message-ID: <msg002@example.com>
+In-Reply-To: <msg001@example.com>
+References: <msg001@example.com>
+Content-Type: text/plain; charset=UTF-8
+
+Good catch. The function should error with a more
+informative message in that case.
+
+From user3@example.com  Tue Feb  3 15:45:00 2026
+From: Ben Bolker <bbo|ker @end|ng |rom gm@||@com>
+Date: Tue, 3 Feb 2026 15:45:00 -0500
+Subject: [R] New topic about ggplot2
+Message-ID: <msg003@example.com>
+Content-Type: text/plain; charset=UTF-8
+
+Separate thread about ggplot2 facets.
