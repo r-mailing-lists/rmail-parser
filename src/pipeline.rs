@@ -112,9 +112,9 @@ pub fn month_from_filename(path: &Path) -> String {
 /// Main parse pipeline.
 ///
 /// - Discovers mbox files from `input`
-/// - For each file: reads content, splits into messages, parses them (in parallel
-///   via rayon), reconstructs threads, and writes a MonthArchive JSON file.
-/// - One JSON file per month: `{output}/{month}.json`
+/// - Reads and parses all messages from all mbox files (in parallel via rayon)
+/// - Deduplicates by message_id, groups by month
+/// - Reconstructs threads and writes one JSON file per month: `{output}/{month}.json`
 pub fn run_parse(input: &Path, output: &Path, list_name: &str) -> Result<()> {
     let files = discover_mbox_files(input)?;
 
@@ -124,13 +124,17 @@ pub fn run_parse(input: &Path, output: &Path, list_name: &str) -> Result<()> {
 
     fs::create_dir_all(output).context("Failed to create output directory")?;
 
+    // Accumulate all messages from all files before writing, to avoid
+    // cross-month spillover in one mbox file overwriting a previous month's output.
+    let mut all_messages: Vec<Message> = Vec::new();
+
     for file_path in &files {
         let content = read_file_lossy(file_path)?;
 
         let raw_messages = split_mbox(&content);
 
         // Parse messages in parallel using rayon, skip failures
-        let mut messages: Vec<Message> = raw_messages
+        let messages: Vec<Message> = raw_messages
             .par_iter()
             .filter_map(|raw| match parse_message(raw) {
                 Ok(msg) => Some(msg),
@@ -153,55 +157,61 @@ pub fn run_parse(input: &Path, output: &Path, list_name: &str) -> Result<()> {
             continue;
         }
 
-        // Deduplicate by message_id (some pipermail archives contain 3x duplicates)
-        let pre_dedup = messages.len();
-        let mut seen_ids: HashSet<String> = HashSet::new();
-        messages.retain(|msg| seen_ids.insert(msg.message_id.clone()));
-        if messages.len() < pre_dedup {
-            eprintln!(
-                "Deduped {}: {} -> {} messages",
-                file_path.display(),
-                pre_dedup,
-                messages.len()
-            );
-        }
-
-        // Group messages by month
-        let mut by_month: HashMap<String, Vec<Message>> = HashMap::new();
-        for msg in messages.drain(..) {
-            by_month
-                .entry(msg.month.clone())
-                .or_default()
-                .push(msg);
-        }
-
-        // If there's only one month group, use the filename-derived month if
-        // messages all share the same month anyway. Otherwise respect per-message months.
-        // Either way, process each month group.
-        for (month, mut month_messages) in by_month {
-            // Sort messages by date within the month
-            month_messages.sort_by(|a, b| a.date.cmp(&b.date));
-
-            let threads = reconstruct_threads(&mut month_messages);
-
-            let archive = MonthArchive {
-                list: list_name.to_string(),
-                description: String::new(),
-                month: month.clone(),
-                messages: month_messages,
-                threads,
-            };
-
-            let json = serde_json::to_string_pretty(&archive)
-                .context("Failed to serialize MonthArchive")?;
-
-            let out_file = output.join(format!("{}.json", month));
-            fs::write(&out_file, json)
-                .with_context(|| format!("Failed to write {}", out_file.display()))?;
-
-            eprintln!("Wrote {}", out_file.display());
-        }
+        eprintln!("Parsed {} messages from {}", messages.len(), file_path.display());
+        all_messages.extend(messages);
     }
+
+    if all_messages.is_empty() {
+        anyhow::bail!("No valid messages found across all mbox files");
+    }
+
+    // Deduplicate by message_id (some pipermail archives contain 3x duplicates)
+    let pre_dedup = all_messages.len();
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    all_messages.retain(|msg| seen_ids.insert(msg.message_id.clone()));
+    if all_messages.len() < pre_dedup {
+        eprintln!(
+            "Deduped: {} -> {} messages ({} duplicates removed)",
+            pre_dedup,
+            all_messages.len(),
+            pre_dedup - all_messages.len()
+        );
+    }
+
+    // Group messages by month
+    let mut by_month: HashMap<String, Vec<Message>> = HashMap::new();
+    for msg in all_messages.drain(..) {
+        by_month
+            .entry(msg.month.clone())
+            .or_default()
+            .push(msg);
+    }
+
+    // Write one JSON file per month
+    for (month, month_messages) in &mut by_month {
+        month_messages.sort_by(|a, b| a.date.cmp(&b.date));
+
+        let threads = reconstruct_threads(month_messages);
+
+        let archive = MonthArchive {
+            list: list_name.to_string(),
+            description: String::new(),
+            month: month.clone(),
+            messages: std::mem::take(month_messages),
+            threads,
+        };
+
+        let json = serde_json::to_string_pretty(&archive)
+            .context("Failed to serialize MonthArchive")?;
+
+        let out_file = output.join(format!("{}.json", month));
+        fs::write(&out_file, json)
+            .with_context(|| format!("Failed to write {}", out_file.display()))?;
+
+        eprintln!("Wrote {} ({} messages)", out_file.display(), archive.messages.len());
+    }
+
+    eprintln!("Total: {} months written", by_month.len());
 
     Ok(())
 }

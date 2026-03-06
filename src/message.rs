@@ -278,18 +278,42 @@ fn parse_date(date_str: &str) -> Result<DateTime<FixedOffset>> {
         }
     }
 
-    // Try asctime/ctime format without timezone (e.g. "Thu Jan  2 13:54:37 2003")
-    // Common in older pipermail archives. Assume UTC when no timezone is specified.
+    // Try formats without timezone — assume UTC
     use chrono::NaiveDateTime;
-    let asctime_formats = [
-        "%a %b %e %H:%M:%S %Y",   // "Thu Jan  2 13:54:37 2003"
-        "%a %b %d %H:%M:%S %Y",   // "Thu Jan 02 13:54:37 2003"
+    let naive_formats = [
+        // asctime/ctime: "Thu Jan  2 13:54:37 2003"
+        "%a %b %e %H:%M:%S %Y",
+        "%a %b %d %H:%M:%S %Y",
+        // RFC 2822 without timezone: "Mon, 13 Jul 1998 12:47:53"
+        "%a, %d %b %Y %H:%M:%S",
+        // DD-Mon-YYYY: "04-Dec-2008 17:34:26 GMT"
+        "%d-%b-%Y %H:%M:%S GMT",
+        "%d-%b-%Y %H:%M:%S",
     ];
-    for fmt in &asctime_formats {
+    for fmt in &naive_formats {
         if let Ok(naive) = NaiveDateTime::parse_from_str(&normalized, fmt) {
             return Ok(naive.and_utc().fixed_offset());
         }
         if let Ok(naive) = NaiveDateTime::parse_from_str(cleaned, fmt) {
+            return Ok(naive.and_utc().fixed_offset());
+        }
+    }
+
+    // Try 2-digit year formats: "Tue, 5 Aug 97 10:54:36 BST"
+    // Strip named timezone suffixes (BST, EST, CST, etc.) and parse with 2-digit year
+    let tz_stripped = regex::Regex::new(r"\s+[A-Z]{2,5}\s*$")
+        .unwrap()
+        .replace(&normalized, "")
+        .to_string();
+    let two_digit_formats = [
+        "%a, %d %b %y %H:%M:%S",
+        "%d %b %y %H:%M:%S",
+    ];
+    for fmt in &two_digit_formats {
+        if let Ok(naive) = NaiveDateTime::parse_from_str(&tz_stripped, fmt) {
+            return Ok(naive.and_utc().fixed_offset());
+        }
+        if let Ok(naive) = NaiveDateTime::parse_from_str(&normalized, fmt) {
             return Ok(naive.and_utc().fixed_offset());
         }
     }
