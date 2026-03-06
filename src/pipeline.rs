@@ -203,7 +203,11 @@ pub fn run_stats(input: &Path, output: &Path, list_name: &str) -> Result<()> {
         anyhow::bail!("No mbox files found in {}", input.display());
     }
 
-    fs::create_dir_all(output).context("Failed to create output directory")?;
+    if let Some(parent) = output.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).context("Failed to create output directory")?;
+        }
+    }
 
     let mut total_messages: usize = 0;
     let mut total_threads: usize = 0;
@@ -270,11 +274,10 @@ pub fn run_stats(input: &Path, output: &Path, list_name: &str) -> Result<()> {
     let json =
         serde_json::to_string_pretty(&meta).context("Failed to serialize ListMeta")?;
 
-    let out_file = output.join("meta.json");
-    fs::write(&out_file, &json)
-        .with_context(|| format!("Failed to write {}", out_file.display()))?;
+    fs::write(output, &json)
+        .with_context(|| format!("Failed to write {}", output.display()))?;
 
-    eprintln!("Wrote {}", out_file.display());
+    eprintln!("Wrote {}", output.display());
 
     Ok(())
 }
