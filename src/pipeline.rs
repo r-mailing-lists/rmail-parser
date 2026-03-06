@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -153,6 +153,19 @@ pub fn run_parse(input: &Path, output: &Path, list_name: &str) -> Result<()> {
             continue;
         }
 
+        // Deduplicate by message_id (some pipermail archives contain 3x duplicates)
+        let pre_dedup = messages.len();
+        let mut seen_ids: HashSet<String> = HashSet::new();
+        messages.retain(|msg| seen_ids.insert(msg.message_id.clone()));
+        if messages.len() < pre_dedup {
+            eprintln!(
+                "Deduped {}: {} -> {} messages",
+                file_path.display(),
+                pre_dedup,
+                messages.len()
+            );
+        }
+
         // Group messages by month
         let mut by_month: HashMap<String, Vec<Message>> = HashMap::new();
         for msg in messages.drain(..) {
@@ -228,6 +241,10 @@ pub fn run_stats(input: &Path, output: &Path, list_name: &str) -> Result<()> {
         if messages.is_empty() {
             continue;
         }
+
+        // Deduplicate by message_id
+        let mut seen_ids: HashSet<String> = HashSet::new();
+        messages.retain(|msg| seen_ids.insert(msg.message_id.clone()));
 
         messages.sort_by(|a, b| a.date.cmp(&b.date));
 

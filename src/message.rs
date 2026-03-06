@@ -262,7 +262,7 @@ fn parse_date(date_str: &str) -> Result<DateTime<FixedOffset>> {
         return Ok(dt);
     }
 
-    // Try common strftime formats
+    // Try common strftime formats (with timezone)
     let formats = [
         "%a, %d %b %Y %H:%M:%S %z",
         "%d %b %Y %H:%M:%S %z",
@@ -275,6 +275,22 @@ fn parse_date(date_str: &str) -> Result<DateTime<FixedOffset>> {
         }
         if let Ok(dt) = DateTime::parse_from_str(&normalized, fmt) {
             return Ok(dt);
+        }
+    }
+
+    // Try asctime/ctime format without timezone (e.g. "Thu Jan  2 13:54:37 2003")
+    // Common in older pipermail archives. Assume UTC when no timezone is specified.
+    use chrono::NaiveDateTime;
+    let asctime_formats = [
+        "%a %b %e %H:%M:%S %Y",   // "Thu Jan  2 13:54:37 2003"
+        "%a %b %d %H:%M:%S %Y",   // "Thu Jan 02 13:54:37 2003"
+    ];
+    for fmt in &asctime_formats {
+        if let Ok(naive) = NaiveDateTime::parse_from_str(&normalized, fmt) {
+            return Ok(naive.and_utc().fixed_offset());
+        }
+        if let Ok(naive) = NaiveDateTime::parse_from_str(cleaned, fmt) {
+            return Ok(naive.and_utc().fixed_offset());
         }
     }
 
