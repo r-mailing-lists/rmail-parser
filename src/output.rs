@@ -31,6 +31,7 @@ pub struct ListMeta {
 pub struct ContributorEntry {
     pub name: String,
     pub slug: String,
+    pub email_hash: String,
     pub message_count: usize,
     pub first_date: Option<String>,
     pub last_date: Option<String>,
@@ -43,6 +44,7 @@ pub struct ContributorEntry {
 pub struct AggregatedContributor {
     pub name: String,
     pub slug: String,
+    pub email_hash: String,
     pub message_count: usize,
     pub lists: Vec<ListCount>,
     pub first_date: Option<String>,

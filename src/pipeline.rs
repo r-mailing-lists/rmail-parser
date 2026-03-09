@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use encoding_rs::WINDOWS_1252;
 use rayon::prelude::*;
+use serde::Deserialize;
 
 use crate::mbox::split_mbox;
 use crate::message::{parse_message, Message};
@@ -158,6 +159,83 @@ fn month_name_to_number(name: &str) -> Option<u32> {
 }
 
 // ---------------------------------------------------------------------------
+// Aliases — merge multiple email hashes into one canonical identity
+// ---------------------------------------------------------------------------
+
+/// An alias entry linking multiple email hashes to one canonical identity.
+#[derive(Debug, Deserialize)]
+struct AliasEntry {
+    /// Canonical display name for this person
+    canonical_name: String,
+    /// All email hashes belonging to this person
+    email_hashes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AliasFile {
+    aliases: Vec<AliasEntry>,
+}
+
+/// Maps each email hash to its canonical hash (the first one in the group).
+/// Also stores canonical_name overrides.
+#[derive(Debug, Default)]
+pub struct AliasMap {
+    /// email_hash → canonical_email_hash
+    hash_to_canonical: HashMap<String, String>,
+    /// canonical_email_hash → forced display name
+    canonical_names: HashMap<String, String>,
+}
+
+impl AliasMap {
+    /// Load aliases from a JSON file. Returns an empty map if path is None.
+    pub fn load(path: Option<&Path>) -> Result<Self> {
+        let path = match path {
+            Some(p) if p.exists() => p,
+            _ => return Ok(Self::default()),
+        };
+
+        let raw = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read aliases file: {}", path.display()))?;
+        let file: AliasFile = serde_json::from_str(&raw)
+            .with_context(|| format!("Failed to parse aliases file: {}", path.display()))?;
+
+        let mut map = Self::default();
+        for entry in &file.aliases {
+            if entry.email_hashes.is_empty() {
+                continue;
+            }
+            let canonical = &entry.email_hashes[0];
+            map.canonical_names
+                .insert(canonical.clone(), entry.canonical_name.clone());
+            for hash in &entry.email_hashes {
+                map.hash_to_canonical
+                    .insert(hash.clone(), canonical.clone());
+            }
+        }
+
+        eprintln!(
+            "Loaded {} alias groups from {}",
+            file.aliases.len(),
+            path.display()
+        );
+        Ok(map)
+    }
+
+    /// Resolve an email hash to its canonical hash.
+    fn resolve<'a>(&'a self, hash: &'a str) -> &'a str {
+        self.hash_to_canonical
+            .get(hash)
+            .map(|s| s.as_str())
+            .unwrap_or(hash)
+    }
+
+    /// Get the canonical name override for a hash, if one exists.
+    fn canonical_name(&self, canonical_hash: &str) -> Option<&str> {
+        self.canonical_names.get(canonical_hash).map(|s| s.as_str())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Stats generation from parsed messages
 // ---------------------------------------------------------------------------
 
@@ -175,20 +253,35 @@ struct StatsAccumulator {
     thread_index: BTreeMap<String, String>,
     /// [[msg_id, month, date_rfc3339], ...]
     message_order: Vec<(String, String, String)>,
-    /// name → ContributorAccum
+    /// email_hash → ContributorAccum
     contributors: HashMap<String, ContributorAccum>,
+    /// Alias map for merging multiple email hashes
+    alias_map: AliasMap,
 }
 
 struct ContributorAccum {
-    name: String,
+    email_hash: String,
+    /// name variant → count, to pick the most-used display name
+    name_variants: HashMap<String, usize>,
     count: usize,
     first_date: Option<String>,
     last_date: Option<String>,
     yearly: HashMap<String, usize>,
 }
 
+impl ContributorAccum {
+    /// Returns the display name with the highest message count.
+    fn canonical_name(&self) -> &str {
+        self.name_variants
+            .iter()
+            .max_by_key(|(_, count)| *count)
+            .map(|(name, _)| name.as_str())
+            .unwrap_or("")
+    }
+}
+
 impl StatsAccumulator {
-    fn new(list_name: &str) -> Self {
+    fn new(list_name: &str, alias_map: AliasMap) -> Self {
         Self {
             list_name: list_name.to_string(),
             total_messages: 0,
@@ -200,6 +293,7 @@ impl StatsAccumulator {
             thread_index: BTreeMap::new(),
             message_order: Vec::new(),
             contributors: HashMap::new(),
+            alias_map,
         }
     }
 
@@ -237,19 +331,22 @@ impl StatsAccumulator {
             self.message_order
                 .push((msg.id.clone(), month.to_string(), date_str.clone()));
 
-            // Contributors
+            // Contributors — keyed by canonical email hash to merge name variants
             let year = msg.date.format("%Y").to_string();
+            let canonical_hash = self.alias_map.resolve(&msg.from_email_hash).to_string();
             let entry = self
                 .contributors
-                .entry(msg.from_name.clone())
+                .entry(canonical_hash.clone())
                 .or_insert_with(|| ContributorAccum {
-                    name: msg.from_name.clone(),
+                    email_hash: canonical_hash,
+                    name_variants: HashMap::new(),
                     count: 0,
                     first_date: None,
                     last_date: None,
                     yearly: HashMap::new(),
                 });
             entry.count += 1;
+            *entry.name_variants.entry(msg.from_name.clone()).or_insert(0) += 1;
             if entry.first_date.is_none()
                 || date_str < *entry.first_date.as_ref().unwrap()
             {
@@ -317,11 +414,18 @@ impl StatsAccumulator {
             .contributors
             .values()
             .map(|c| {
+                // Use alias canonical_name if set, otherwise most-used name variant
+                let name = self
+                    .alias_map
+                    .canonical_name(&c.email_hash)
+                    .unwrap_or_else(|| c.canonical_name())
+                    .to_string();
                 let yearly: BTreeMap<String, usize> =
                     c.yearly.iter().map(|(k, &v)| (k.clone(), v)).collect();
                 ContributorEntry {
-                    name: c.name.clone(),
-                    slug: slugify(&c.name),
+                    slug: slugify(&name),
+                    email_hash: c.email_hash.clone(),
+                    name,
                     message_count: c.count,
                     first_date: c.first_date.clone(),
                     last_date: c.last_date.clone(),
@@ -363,6 +467,7 @@ pub fn run_parse(
     output: &Path,
     list_name: &str,
     generate_stats: bool,
+    aliases_path: Option<&Path>,
 ) -> Result<()> {
     let files = discover_mbox_files(input)?;
 
@@ -373,7 +478,8 @@ pub fn run_parse(
     fs::create_dir_all(output).context("Failed to create output directory")?;
 
     let mut stats = if generate_stats {
-        Some(StatsAccumulator::new(list_name))
+        let alias_map = AliasMap::load(aliases_path)?;
+        Some(StatsAccumulator::new(list_name, alias_map))
     } else {
         None
     };
@@ -459,7 +565,7 @@ pub fn run_parse(
 ///
 /// Reads `{input}/*.json` (month archives), generates meta.json, index.json,
 /// message-order.json, and contributors.json in the output directory.
-pub fn run_stats(input: &Path, output: &Path, list_name: &str) -> Result<()> {
+pub fn run_stats(input: &Path, output: &Path, list_name: &str, aliases_path: Option<&Path>) -> Result<()> {
     if !input.is_dir() {
         anyhow::bail!(
             "Input must be a directory of processed JSON files: {}",
@@ -499,7 +605,8 @@ pub fn run_stats(input: &Path, output: &Path, list_name: &str) -> Result<()> {
         anyhow::bail!("No month JSON files found in {}", input.display());
     }
 
-    let mut stats = StatsAccumulator::new(list_name);
+    let alias_map = AliasMap::load(aliases_path)?;
+    let mut stats = StatsAccumulator::new(list_name, alias_map);
 
     for file_path in &month_files {
         let raw = fs::read_to_string(file_path)
@@ -532,7 +639,7 @@ pub fn run_stats(input: &Path, output: &Path, list_name: &str) -> Result<()> {
 ///
 /// Reads `{input}/{list}/contributors.json` for each list subdirectory,
 /// merges by contributor name, and writes the combined result.
-pub fn run_aggregate(input: &Path, output: &Path) -> Result<()> {
+pub fn run_aggregate(input: &Path, output: &Path, aliases_path: Option<&Path>) -> Result<()> {
     if !input.is_dir() {
         anyhow::bail!(
             "Input must be a directory containing list subdirectories: {}",
@@ -557,7 +664,9 @@ pub fn run_aggregate(input: &Path, output: &Path) -> Result<()> {
         );
     }
 
-    // name → aggregated data
+    let alias_map = AliasMap::load(aliases_path)?;
+
+    // canonical_email_hash → aggregated data (merges name variants across lists)
     let mut merged: HashMap<String, MergeAccum> = HashMap::new();
 
     for list_dir in &list_dirs {
@@ -581,11 +690,13 @@ pub fn run_aggregate(input: &Path, output: &Path) -> Result<()> {
         );
 
         for entry in entries {
+            let canonical_hash = alias_map.resolve(&entry.email_hash).to_string();
             let accum = merged
-                .entry(entry.name.clone())
+                .entry(canonical_hash.clone())
                 .or_insert_with(|| MergeAccum {
                     name: entry.name.clone(),
-                    slug: entry.slug.clone(),
+                    email_hash: canonical_hash,
+                    name_count: entry.message_count,
                     total_count: 0,
                     lists: Vec::new(),
                     first_date: None,
@@ -594,6 +705,13 @@ pub fn run_aggregate(input: &Path, output: &Path) -> Result<()> {
                 });
 
             accum.total_count += entry.message_count;
+
+            // Use the name variant with the most messages as canonical
+            if entry.message_count > accum.name_count {
+                accum.name = entry.name.clone();
+                accum.name_count = entry.message_count;
+            }
+
             accum.lists.push(ListCount {
                 slug: list_slug.clone(),
                 count: entry.message_count,
@@ -634,9 +752,16 @@ pub fn run_aggregate(input: &Path, output: &Path) -> Result<()> {
             let yearly: BTreeMap<String, usize> =
                 a.yearly.into_iter().collect();
 
+            // Use alias canonical_name if set, otherwise most-used name variant
+            let name = alias_map
+                .canonical_name(&a.email_hash)
+                .unwrap_or(&a.name)
+                .to_string();
+
             AggregatedContributor {
-                name: a.name,
-                slug: a.slug,
+                slug: slugify(&name),
+                email_hash: a.email_hash,
+                name,
                 message_count: a.total_count,
                 lists,
                 first_date: a.first_date,
@@ -671,7 +796,9 @@ pub fn run_aggregate(input: &Path, output: &Path) -> Result<()> {
 
 struct MergeAccum {
     name: String,
-    slug: String,
+    email_hash: String,
+    /// Message count of the current canonical name (for picking best variant)
+    name_count: usize,
     total_count: usize,
     lists: Vec<ListCount>,
     first_date: Option<String>,
