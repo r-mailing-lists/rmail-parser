@@ -484,13 +484,19 @@ pub fn run_parse(
         None
     };
 
+    // Accumulate ALL messages across ALL mbox files before writing, to avoid
+    // overwriting monthly JSON files when multiple mbox files contain messages
+    // from the same month (e.g. boundary messages in adjacent monthly archives).
+    // Dedup by message id to handle messages appearing in multiple mbox files.
+    let mut all_by_month: HashMap<String, HashMap<String, Message>> = HashMap::new();
+
     for file_path in &files {
         let content = read_file_lossy(file_path)?;
 
         let raw_messages = split_mbox(&content);
 
         // Parse messages in parallel using rayon, skip failures
-        let mut messages: Vec<Message> = raw_messages
+        let messages: Vec<Message> = raw_messages
             .par_iter()
             .filter_map(|raw| match parse_message(raw) {
                 Ok(msg) => Some(msg),
@@ -513,40 +519,50 @@ pub fn run_parse(
             continue;
         }
 
-        // Group messages by month
-        let mut by_month: HashMap<String, Vec<Message>> = HashMap::new();
-        for msg in messages.drain(..) {
-            by_month.entry(msg.month.clone()).or_default().push(msg);
+        // Add messages to the accumulator, deduplicating by id
+        for msg in messages {
+            all_by_month
+                .entry(msg.month.clone())
+                .or_default()
+                .entry(msg.id.clone())
+                .or_insert(msg);
+        }
+    }
+
+    // Now write one JSON file per month with all accumulated messages
+    let mut months: Vec<String> = all_by_month.keys().cloned().collect();
+    months.sort();
+
+    for month in months {
+        let month_map = all_by_month.remove(&month).unwrap();
+        let mut month_messages: Vec<Message> = month_map.into_values().collect();
+
+        // Sort messages by date within the month
+        month_messages.sort_by(|a, b| a.date.cmp(&b.date));
+
+        let threads = reconstruct_threads(&mut month_messages);
+
+        // Accumulate stats before moving messages into the archive
+        if let Some(ref mut s) = stats {
+            s.accumulate(&month, &month_messages, threads.len());
         }
 
-        for (month, mut month_messages) in by_month {
-            // Sort messages by date within the month
-            month_messages.sort_by(|a, b| a.date.cmp(&b.date));
+        let archive = MonthArchive {
+            list: list_name.to_string(),
+            description: String::new(),
+            month: month.clone(),
+            messages: month_messages,
+            threads,
+        };
 
-            let threads = reconstruct_threads(&mut month_messages);
+        let json = serde_json::to_string_pretty(&archive)
+            .context("Failed to serialize MonthArchive")?;
 
-            // Accumulate stats before moving messages into the archive
-            if let Some(ref mut s) = stats {
-                s.accumulate(&month, &month_messages, threads.len());
-            }
+        let out_file = output.join(format!("{}.json", month));
+        fs::write(&out_file, json)
+            .with_context(|| format!("Failed to write {}", out_file.display()))?;
 
-            let archive = MonthArchive {
-                list: list_name.to_string(),
-                description: String::new(),
-                month: month.clone(),
-                messages: month_messages,
-                threads,
-            };
-
-            let json = serde_json::to_string_pretty(&archive)
-                .context("Failed to serialize MonthArchive")?;
-
-            let out_file = output.join(format!("{}.json", month));
-            fs::write(&out_file, json)
-                .with_context(|| format!("Failed to write {}", out_file.display()))?;
-
-            eprintln!("Wrote {}", out_file.display());
-        }
+        eprintln!("Wrote {}", out_file.display());
     }
 
     // Write stats if enabled
