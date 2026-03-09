@@ -1,0 +1,929 @@
+{
+  "aliases": [
+    {
+      "canonical_name": "Brian Ripley",
+      "email_hashes": [
+        "3286dbf5012aca84a365fecf5d1ec8884394c55dfa0369f94d45f497aa038b47",
+        "375ec446f7a1157a4f0268b6dc682d6c2a5b186f57aa61253477aa48159d2329",
+        "818dae4fdf4016331d08ab8b5065ff3f981ce989ce3ae70303f20f145d5949e1",
+        "91d5d6e55cc8120d0c255579ddf754df71576bbb4821e8cf8967b38c4784f449",
+        "99596994119ea89d2b61a03eba75495394dbcff7a274af6e297a3240b549d37a",
+        "c5d0d8f09bc545ede8356a1fd199c0f278d5b7361e67127bf6c141458274153c",
+        "feb3d07a6f247d265d2462d8e53810f3e4095cc4453eb71e1ffda0e398d778e1"
+      ]
+    },
+    {
+      "canonical_name": "Hadley Wickham",
+      "email_hashes": [
+        "120ce28c6315dd0de419ddf6ddfe63d332d6337a253745ec7f27d22f63f0b7c5",
+        "32916ed354eafa1dedfcc7ab83aea781d79e68664b0fa536c3f7d6a85eea45d9",
+        "59d54b5e97109c09862620e87f95c8d93a7818d750f6a96d1d2b62b2b11f7cf5",
+        "78ed178a2a834406115d2917490a5d6eb6217493116357bc9bb8ae3e96968152",
+        "ca0ecd97ae88c22ed6e7f3889e08db1f732ad5eadb66671b2dc01d355cc20bf9",
+        "dafd6abec6616616be8536c5220c050f99b4f919ba4273e914856ccc8e72e623",
+        "e3cec7538d091387b4e090b248f6caea5bafdad99470dd7cf0628cdf6975e4fb"
+      ]
+    },
+    {
+      "canonical_name": "Martin Maechler",
+      "email_hashes": [
+        "08b80bef15e2ed5825d254f60485cdcaa758ceab7e5763da8b9597d47c08eaa5",
+        "08cbc9aa6af57043374ba5e7405b4a663ecd653d07ed9c323a08343a1610db4b",
+        "58080894eebfc7eac16671fbbf717c5e6264b112b38b4f6250cef54612da09f2",
+        "60adff948614501274f566c08ef1159143cbe943805a8ed4cb200de92d64915a",
+        "766068ea1db2bd472d09777fa03b0f09b8fc459fa51150ed3e26f51ff8e6ca42",
+        "979d9b629c94fb3e2fbd3106e1f0b921b1b95a39cc6a3d3e6dca2f72fdf3ac4b",
+        "a29684ace2a674adeaded61ec4094909830cf55795c2e5946fcee195aa2a031c",
+        "a92f4a07d4e3cad5fba985e30db2b0fff598d5ddfbadbb2e91ffe91636400c62",
+        "c1e0575ce023711414056e46c72c590f45ca0fadf72e92845bd17d4f37dc3a13",
+        "c2c86f22f78a4ecfe6d0e6b4e2be505a3f5beb0470ea88c903688ac536018a98",
+        "d64f7d076a60333ea273750679032b0fc3ce5b788604bb025f6bbd7a97e92831",
+        "de042c0549efc3fc1a7b5b568c4238c6bf6d2d8df2d40c5d9057bb21de74e2c2",
+        "e2b23503906455860e002fe420f68782f19808973ba18eead79732b4d77840ac"
+      ]
+    },
+    {
+      "canonical_name": "Peter Dalgaard",
+      "email_hashes": [
+        "0602148dcce3c4368e4d1d0dcefe331d7f7242ad438c1a88c37b0b1d1888b17d",
+        "07fc0deef80ad4caaacab9ed8e3067c4f689133e4efd77106ba3849f709c31d9",
+        "16b800f3161b270622c2e644760e595bbe5e68aa3370a3f648fb795f19b38ec7",
+        "1fc04d4a77fecb20fdc58c1c3055a221c8b5bb5afdaf796ec0c7a054370691ec",
+        "2f63cffe777527e90e617a28339696db36859b8af882add2f71389c7afdca4a4",
+        "409845b1de856be3139032f02f06e223e8f42c55644c877caf44ca15af9ebff1",
+        "5d0f61ffffc9a67fd86f4b9a1ea3fac7d731c19e1d8679b6ae315232b22874e8",
+        "6970d38b63c93ff8b781d9787948d92fe2e7b4240149faca590409068c44b75c",
+        "8abb4c6981ab77500b9fc86f8cd5727ec31a63f3d5b82e6e3051e8564d0714bd",
+        "94c22474a7a04ff4ebb63579e218e559559f36476cb3c5059536218e5ef0e3eb",
+        "a51d6e3187e7f8d008863bb40373084f52f62b4c0146135450122bc2f7f456ea",
+        "d175354255003fed54b17e5249169a2b1e5c064b386d8c5e5b0791e77361bf7f",
+        "d2573f0c0a474184a9d96c815fc6bf37ff7c6392082069d810139c562d5a6f71",
+        "d79f7f7aadaa643f3d84d8044fae63a21eadaad807f7baf741671876cecc5fab",
+        "d9fd91d299a75b5bb12e8fe56282f6e3ab90721fbb5cc61dd67258dc21f7ad2a",
+        "dba56a01bcc1d0087e1a1bb43fd4589d309fde221a482b57e9ef6efb720b1dd0",
+        "df4a7a8ab4f8d0bef528c62db85abb1da002e92b7cf8c64fd891eca0ea281ee4"
+      ]
+    },
+    {
+      "canonical_name": "Friedrich Leisch",
+      "email_hashes": [
+        "1703fdb2e31b89ba6904ba1fe6d493fc5273e759584c0e33d91f164d139af761",
+        "2272cd5a8d9728602b8c9c039d74bcebe6fc79965f3cb706baae64e9a862204b",
+        "30d001dc747c04b1219ea5f62f9a8f3508c5053baeb93f159bc28cd315fb6ad9",
+        "31129dffff3fc3dc4381b5047dab418f8aba21aee2586c237b775a9f30d3cc59",
+        "32c138b6dfb45bb7af61fdccc8da40ad705cb2ec7823755e1be5f36f61d6450f",
+        "42ce7fa710255541996439ecc397cf019b0ad401c34e67868f6372b80252671a",
+        "4513f1f74d40b39c9ade86537ed609719bd9a66ab903cc80ef06332aeb9cb24a",
+        "5a5fdfa4351343af049914cd2641c9feb963f07285041256e0164002823b1114",
+        "90f40443323ab283a2ddeaeb653e0fc1d1abb33f719cf40a7f9bf92c5e7485c0",
+        "f512eae03420e9444400c55f25626e4084caa3a764b475c9211b89d996d91833"
+      ]
+    },
+    {
+      "canonical_name": "Bill Venables",
+      "email_hashes": [
+        "1f7ebc46af6c6fc7def0591017b0a792ffd3cf837ed13fa794cafcccaacf98f1",
+        "289e4406465d9fab9d602479bfbc34cd8578b0058fa307af29b8ec345deb20b8",
+        "620c81d9380ee39dec7ef7e6d2fdb63f90244f70d6704fefee2ca63a5c1404d6",
+        "697e85d94ea920276120bec57848c85bf06bc1e10bab4f65f5ea4414c7f531ee",
+        "82c9e2f36704d20a6f7aa2fbecd766ee2846f4bd5c258d9e22b4ee1c752df73e",
+        "91e544124c2765f87d45eb89c02b5c30fa81a75ccb6e51328a0445682154a583",
+        "97793f392bf2bf3a012ac24f70f44f3ecf44e85fc16913bb0605a0e5737c2a54",
+        "a1611e5cfca09ba23cc84933c0ecdb12de98c3cfa888a9426be8ee967fbe4fc7",
+        "ca1c88963fb5cd5f4cd9053b781854479dba812db3b38705b8ccc9a407159d5b",
+        "ce3208f02bbe54cb5ec1154a2b80867827b1828d344ecc2c91ca6679e5572e5d",
+        "fa9f4aadcd2a48660814ee3a3a559195aaeafa7074b89468465e8c1bc07aeea7"
+      ]
+    },
+    {
+      "canonical_name": "Ben Bolker",
+      "email_hashes": [
+        "058f22460bce77c55c3340fec40d01e374409ed76ec5a897b62075a27eb9734c",
+        "0c3757dab0ef245ac2895eabb1a600518fa6fbada728778e7984acecfe6d2c35",
+        "10af28d36bcdc09beaca76a608d7bee9f1f3e76c32aaecff390c982a8bb8ca4a",
+        "18f6c2b0b79bec76f7afe0fad5e36fffd27297982eaee9a3a21101b9461258e5",
+        "80b15120143ba1900c0e6fc5f68c3369a24603d1356e536d6ca045630acc538b",
+        "9bd934f022280fbfed477923be6c98ba100110f78d980df73d4dea52f5880ace",
+        "c2a5f05225da78eb472c4858f7189371ead54bbdbc9303332da13f97a2955d53",
+        "c3c0d373b0de10f3f52518ed7fe1dc69b52f1060fbf114b62ed89bbe100c4a8b",
+        "cfb240152e06206ad3f5cc21c1f9a50cc467a4291d8f8553f42c0253d803b62c",
+        "d08edf0cae3d275cf055ae0ae2d11c6d7db76f82f243f7b428105b56d670824b",
+        "d248994128fb99b52e482582deffc982c9f7d916352408e03f5170ebe9aa4774",
+        "e939ee505cc6d7a90d0153f4adc5952232fd23faf5cf21e6fd51dcdff5d5ae73",
+        "ee2af5115e94a77b36f31e2cf762a81be7012eaa1f093c309414d70911d1f250",
+        "f00e53f4e71707c5ebbef12853fb9a7fbbdfbbd6031864046ebf2a92715a9d5d"
+      ]
+    },
+    {
+      "canonical_name": "Bert Gunter",
+      "email_hashes": [
+        "55999f6db81a30285e8663f25ef6e0e06fc3f1766ef61fa3463f1a1ee9e82820",
+        "6db778788b7c3a4d799c89b7b43dc5f8ce00d9d5550207d40f48efde33d61ae2",
+        "be33e4b6b93b14487fe5706ad20c8119f12a9c16f94e8024bb998c159c7742b2",
+        "caf64b7fbe04904aa6bbd2b8b3fc12c268967250efe01d3409713a82fd4e3059",
+        "e06c8b0dadbc2737decb2b2e2cad765c22313a04fde395a45b7b4f4ea0f812b1",
+        "fff944709cd4e01c43b94b925a795dc8ebb00f65da76c888c1d3901ec68b6b6b"
+      ]
+    },
+    {
+      "canonical_name": "Greg Snow",
+      "email_hashes": [
+        "06d451eeb861da0291a2537cd18be366b0c2180963ad8846ac93dd2106f4d616",
+        "6afe0748979111bd83910ff904e9e0eeddd333040131a87795ccc775d9e5ddc9",
+        "7e8b90198d8dda6d8bbc636598f3105b18d65713fa78fc3e88cbec77163d50cf",
+        "aa36935f061fe6abd6e7a2e3ec0c60df009f5972868b73d8b185d0c3227e13fc",
+        "bf870258d4de356e57d33183d7c50a218eaebd7c22ab3fb83d831ff6218da531",
+        "d2f9bb4886b25a9f732759fe05a19061c499befbba553fe79bba4cc9f00cec28",
+        "e432b243d0660ee238e83f8aa2714b750d4574c97597be8ee6eb021bf26ebc5c",
+        "ed7f5d7625f44af90c05600841163498534037e3a4ae7ba97a2554a773873d3b",
+        "f52439546dde3717af38e20a16dca42bb4d820da276ce810516f92fa7ddb61e5"
+      ]
+    },
+    {
+      "canonical_name": "Edzer Pebesma",
+      "email_hashes": [
+        "31dc99e4179c2c29a392fef122ed731444dfba9f1fd5e6245bb4a47046c7ae58",
+        "66aa041123109049e85426fdc58f734b4efd3e78a701238b45aec105982d5e4e",
+        "80a3c0260cb28c409993aa1b5caba819dc4bf73ba5e27fec46c2811c88c72c17",
+        "8c6adbfb13cc921a8bb8e1cfb02264929bbf4044d8ad148cd40d1f2dc9c49259",
+        "8e181f5afb47e7d4ceb091233005fbafd8d8b5f5c07861ede3bd227c8506da89",
+        "a7fb0ca623e251a5aff6aa466eb7f50e3c643594fe03e3232d546a007043eef0",
+        "dc9c0d99e64732fb3b0f9ed04046937206c628f39b3a0556850153cb8eb34ebc"
+      ]
+    },
+    {
+      "canonical_name": "Joshua Ulrich",
+      "email_hashes": [
+        "1c142a8ab2a2cd292396c50d658d894b0e8efcc0774aa9558978b89b50ac3080",
+        "23f6c30ff3bdcca471f7faac8696c097be744a921830fdf6ee417f06337a1b60",
+        "2a3febc2db38169fc304b5e056a888d4314bdb4c8196e74b0836b6ec8c4f6137",
+        "a425ab3832ccd69401741603dd2c2ef569297144eaa6f47e54ea9c4a672f700d"
+      ]
+    },
+    {
+      "canonical_name": "Jeff Ryan",
+      "email_hashes": [
+        "4c11198e12fc267ae3e3c06487930e8e9dd8ef89399ad783a1835a1dd01ce593",
+        "95878a047996a0737b4b4d2ed91b77929627ecf12d574b471a1c5fdc0d35066c",
+        "a8ded8dad9c063ad82aa598c04f8affcb42bfbdca02708022e07efbf3c44e52f",
+        "b0f8fe52904ed0e79787e2a3193d073d684c22a5cd96363205ed37d7f0fee918"
+      ]
+    },
+    {
+      "canonical_name": "Luke Tierney",
+      "email_hashes": [
+        "10b6c7a1e0b8198673731083b2adff8f197cc414540c6f5ada34600bc932fd7f",
+        "122e02a593d41fa62b6dab459eafee83b77d39d4cd3661f0f888f99aadb07b10",
+        "14c67cecbcd1249d387d869b034012a9c51134ba9eca4077cd8169ce11744ca0",
+        "434741881c705b639927ede4619bc829dcf205492f391c933b24cd454a9b92a0",
+        "5da9eb66ea6bfbe9b7e0e6d0b6620c790e12f84753341ef2349d51d7875d129d",
+        "60f2addc30a3c4f8ccbdd6ef329300ded75b9c13d23fb9f5d3ea81ce6e824eef",
+        "a5794212f0450ee86843a234fdc23fdecc67cbd9935fd99e22e36e11b265bf20",
+        "cd721ed2107e1e5d1becb3c6b2fe64c004b7de7d52c5154773faa334c8819c45",
+        "e597ea4fe0a2c5e50eebcd523656b88b50d1d2c5489800ec4e337589a90fd166",
+        "ec92312862d528b9d19b265369796c7158d0cbfb50e13e996d8fe6ff7f0105a7",
+        "fd87c994f74e0db3eb4746b5041d9c21c4b45ec2e8a16acbcb99f7a3f6e651dc"
+      ]
+    },
+    {
+      "canonical_name": "Duncan Murdoch",
+      "email_hashes": [
+        "0b169dc9578e443c97ef875feba9794619f6e667997aabcb13de6d581cba9312",
+        "17e1fcd7901e6a11dc6bc3ede542d46252611499631dfb4199936939fda2e399",
+        "2c29654901c6af19d511ed0419332d94c100586e3e427467f118bc891bc76e5f",
+        "35f261b66c0c6f08cb6521982374770efc2e112493b37e88d5f047c7ad021a16",
+        "b9d778f6d10a0391c40a90931d7e64a7032fcfe424a10a07ad582adf7bd0e90e",
+        "f10e1920504dfef879061667fbcfa0823bbc832410cad04707fb294db3bd8d83",
+        "f9a415d339fb179db05d60d3dad3c3f8a3545457db293eaaaa76ffc7f4ce0713"
+      ]
+    },
+    {
+      "canonical_name": "A.J. Rossini",
+      "email_hashes": [
+        "035aa365217fa4ca7185e15d86df9cfadfe895a8833f74f31844a380f3e3aaa4",
+        "0c039ab537611416fe37b12e9ca69767bfd2c5030d7e2f2a7420f19217e05d1b",
+        "2d5fcd74a02c44dee0ddacfd26f396b33266e5b187be5d3c5524f48eab26238f",
+        "322374f518e15c55dbf5604417cdf3b8e01e04f0999f4c13524ce24837f3ed83",
+        "4696393a30a40397b8349994e2f8ef48c98e2e1828796836754547113a1e0dba",
+        "7fe193458fd9d69e194c2c818222c67da8e8356f82344e06d930ff1ee5798f71",
+        "8aee6c7509daebbf90e365c965506aaf9bfc4334468a6e5640b0892751894981",
+        "bdf35b890dcafc4b9f58359352e2b55826c9fc9adf8535ab50788b40192c71e3",
+        "c3dc13942f537fd640653fab81aa068d6ec9d2a416259d6888d8b5c23571d4b4",
+        "c4f12fddceb5d458999f6de69c6f0f558d5e00fb32eab45ac3d3fa1a084303ad",
+        "ca0b0be9c0f205770454f9eacba94b44c31953a0be638dafc5cd2db71c2a7f5f",
+        "ccffcd8086e98cd586393597c6e5cca8b8136bdfff3eb4c842e4829a61b703d6",
+        "e38e01ad6ef7554feaf1446fbf732417739f2726ef60f5377d3a8dfe80e4b2ad",
+        "e7a4ed84cac6fb4c30a4b9c936d8ca39a08d1d8c315ab827b9a185808aebd5cb",
+        "fde89436408d63b9a19b5da1f00cb9eb51a02ca0816aed42ee94d8dfb3c52537"
+      ]
+    },
+    {
+      "canonical_name": "Richard M. Heiberger",
+      "email_hashes": [
+        "2e0c4e03037729cd6ae1e263da647802d355abd9b10fb514a2b7bae246e0a94b",
+        "4ce810eab8587777db353ea9d997b9e94d9e73af018121f9a3424238038952df",
+        "50c3516d6544062934b38a6e220a52543ee9884f654a2fb8995bf9aea6aeaa19",
+        "73651797c7d0d91c8ed9a0845f9a951e2c24a1162e9e58dbe416c17050df0d73",
+        "e4cf7a9359a9fce25af8998318ee746249396e500d148a56a9f866d34b008468",
+        "f0ee7b1cec97b7179640c54730d6798c9c94d073ab21bf50c568c0817a3ec9e7",
+        "f2902bb7bf4e430670d9aab08348d4228400c239dd91133544c0c61925c5c4ef"
+      ]
+    },
+    {
+      "canonical_name": "Robert J. Hijmans",
+      "email_hashes": [
+        "2e05ef6e5328419e725eae15adeb8274f2149fc58b56973dfb1c0aea891fb317",
+        "4428b286e774b66bfb53c84d03fcf9b95c83548dc861589e72558015b74b2e91",
+        "5879c4d77ab7447558ac9c7e802d5c9e4448a50330429cf06e45eba3ca08afcb",
+        "70faee4a4bb00a9a42b7eb40463e8688ad54c69883a6137dae52bd7d9c748ee2"
+      ]
+    },
+    {
+      "canonical_name": "David L Carlson",
+      "email_hashes": [
+        "00d66e6c81a6732a8964ba7aacf8ccf43de8d3981d47e03f4e0ae75c55b07379",
+        "1c6db2a0e5c011c43dfe903f318d9c072dd5005c8454c036c319f4e4b032fd69",
+        "e1b59e9698f85319c51036b7be38375ca2d514289b08c1e55741bca05e6c0931"
+      ]
+    },
+    {
+      "canonical_name": "Dimitris Rizopoulos",
+      "email_hashes": [
+        "02d3646a289a960533732d931746c3db82bff2d5017988028ea5a2fc836d3d26",
+        "255e70445195f93351001d553d560dab56dbee2dac8cb6c7029fa1bd536c406c",
+        "6de75dcb8ced7d02a7ebb7a58f3def10545437b51ed60485d3e0e3b9ed5ed8b8",
+        "b5a614f66e05fae270270931344dbc097fbdda04400eb71741793e00f05a82fa",
+        "e3806fb5379473fd3e6887382569f2b11f5441f7e9a036248c569fc43a86f380",
+        "f9018e2d7d314e804d65265710a5fb6083ebd23f479a870d61d5d3ac343a1483",
+        "f98f43a8ad7df72747466603ec1bc7fb20890f9917057a29e1c1d2ba079e480c"
+      ]
+    },
+    {
+      "canonical_name": "Roger D. Peng",
+      "email_hashes": [
+        "5ad8177e18d395eae0e7bf02d5adfa342212c6e00271b9319e82c49dd4c8665e",
+        "cdbe68faee5d48519650c5720313de11fa752260256c4c22aca3cfe905330834",
+        "d8f605056634f86651dd48f76e5111113736ebdc34f063e70cc1913da6b4cec2",
+        "f16db268d52d59f4891274e2527502244f6fb69eae6abe5f5f14ba72cc4ce10e"
+      ]
+    },
+    {
+      "canonical_name": "Tim Keitt",
+      "email_hashes": [
+        "0042cb9f110773b83d9c979cead2263cb2e28429e358bd4a999e51500a62ef01",
+        "0c427f693debd0490a14316164c093e3b327c01ee16d9e6901f7b20f85c95f60",
+        "2d8d5b8050425938214c3a77d47a2be0916edb7058260fe8211414af4058ae13",
+        "54384dd522cf32f9972d11e07f32d774852eb69d44e8d273f0fcabf4c0e2144f",
+        "5f509a58331f152b93e1da1feaeb82ce1f162cc02ef9db349b3783e068a20ce0",
+        "66a2e990daa286c467ad7573b0c7a9a5a41f6f831366788cf6f547f8778f0dba",
+        "6e9b51d9f354010820e610af0f10c30fed39963b1f9f44ee508e248b23c5ff07",
+        "75030c3a49571161047adb43cd9d56ac70d62222046423ff2e6ca5168dfcd53d",
+        "836371f8ab4aebd5b5f67ccf2c2f1aa6cb3c6078416bd69e57b87bda99ccf4ca",
+        "84904747baaed9f66964649e3a4440e2259fd3d97de51b73cf61f228df8fb895",
+        "9485c09ba53cbe423f3d2a55c5c66cc75e2a647def885e744ac1743c93187a25",
+        "c24ea997ca73e7dc89b861977c001d008d08fe12092a87fc6d2d45568f37f6a3",
+        "c3cb4ad52fbd8d6a310b174689d1cd541fff5672daeabf5a33b78f6c5bb50e1b",
+        "cb4f5cf372f2e80bf8aed774b8fe6a216c524818832d9a40f423de5f2d6ba7e2",
+        "ce27409946ad223ef0a5a3ae75419e95373e1d479b48467a993ca89dbc36846a",
+        "d066efa7e4bb329074ad861db4fecbaf2870e571da71eef9913551813546f0b9",
+        "d1fbfc1cb7ef35401094f34c8b86be970c51c67d04033c5e7eff9b5bfec47e48",
+        "d224c0af66f953bface32ac4f3757a048544784ece1599739e0b81c7642b38ef",
+        "f5c83b97d0534dc9ef4b4a06e2eb9c284a7ee63a34355c23eb5266ee5d98c592"
+      ]
+    },
+    {
+      "canonical_name": "Kjetil Halvorsen",
+      "email_hashes": [
+        "16d0be4d52babca8ab7fce8264c3f82d90c123f830cc2d9edc068dfaaeaf4757",
+        "35069f23d24ca6b2aa43f3e2473cfc186de35c56571fb244195704eaf7512018",
+        "5e81db5b83decbbc97922f4421e0852c076744e04fad10d9087e6c138bc7255b",
+        "93a539c8da05cf6597c1e5ae8f4d4025a0fab2eae65962c06b7a3c45526dc4a3",
+        "a9ad9586a72d31663c33aa3d5538e30f797e1d593f8afe792a73b3f03242c589",
+        "c81cc06f35818c3d710f7b7d144f2e9c48a291c60b8119a651c73f51b934f72f",
+        "e1b41696ed32db02391dd793213662bffc7a50372710c7208150a9de31a6448f"
+      ]
+    },
+    {
+      "canonical_name": "Gabriel Becker",
+      "email_hashes": [
+        "425e6304e1663b051566c94e9aaec800baad76542aedff5bf9f5f6dcc6eca188",
+        "789f78e3b72e25f51708cb594894538ce2466ff703315822391e5905856a5679",
+        "c93bbb4672421ec71935a149093c2872033d8b8f8da5a2d1c3bac23748593199",
+        "eac28f15e3960067b39340325a55fbd1065e3b32028ae77cde32975974512b53",
+        "fd746a275eab1924fa06769f9574575c9cdde810cf847c001ca10ef098befd52"
+      ]
+    },
+    {
+      "canonical_name": "Abby Spurdle",
+      "email_hashes": [
+        "0eb16fd9e97bf0f4728957e3e93ffca3a4157dc7999c72558370c767bb65f7e9",
+        "5453ae8c9e5f95157e1702beefda0c211aabfa14184d6f4930303c68ee9308e9"
+      ]
+    },
+    {
+      "canonical_name": "John C Nash",
+      "email_hashes": [
+        "3bf13e4030d6ccfb8b926ecacccb28843cbf6d33b7b988bdff965495e66e883c",
+        "3c186aece47b9fdb3cc7c9c4b2429fcf77a95534a068b908c57a0b272b212c98",
+        "ab5442c9fb43afdbd10158c55cb629fa6a94671cfa7cb228e7238a30f6b807b8",
+        "b69dc597287b01916fb57d8dc5f5adaf4198f715a2781a3ac147feb2511e85bd",
+        "cb1e1ad5faa281e458b671afe0fe007fe9411a1936256eea41a78d09be213609"
+      ]
+    },
+    {
+      "canonical_name": "Jonathan Baron",
+      "email_hashes": [
+        "8654be822d0d20d8c6ecc7bc25cb15a89120a671b8282ec16320f897275904f1",
+        "90ee7c14133430edad143ab0a5de0a2794f258e392ce3496523238f25d414453",
+        "93b259a20d02f8a19b6d510a87cdfc045b4d232bfc42705beed26a319aca309e",
+        "c2e1ecbda165618de13a93805df7d3f58d0ddbb632215e83fe6602b4f82f79dc",
+        "dc3633bac5f4ce429738bd566dad831e0f3f1e8c2eb846d7a1ba5cd71ad0b01d"
+      ]
+    },
+    {
+      "canonical_name": "Berwin A Turlach",
+      "email_hashes": [
+        "0c124eb7c54cc5d894b6e81cc0bf32c0b42168daf5343c2db4e79b899256f8d2",
+        "5430ac02ec781932f9685429c6528497c7fb1d9d5f854913d4e695dc39ba2f5f",
+        "58bf72013d205390d592e78a1f69707e4bfc31b4df86abcc7978721ce2a4726a",
+        "6fd82df2848d18c317e26ae997bc4668ab9a7bc1357727d66594716ebe631197",
+        "70a51cbbff199db17aa8a72bfca27f390b11a706aadc6e28ee10af4fe7f6385e",
+        "c713595f8ba4addaf548e1f7dc894d6765e6cc4e6c8e30acf6f410b9d2c7b89f",
+        "d14e106c33ab83c29f099694ad00ad32dfb3c3c2f8898ed1a072e896fb8f3656",
+        "d85f3c18e521ecdaef8bd3046a67077fc5b6616fd87c4cb676a20aa14f63228b",
+        "dadee490f6d12e6d01d3cf93103992ecce7694d3206df3005df6d69a69ca60a0",
+        "dd7151e523c2b6728a962a5a7d8996774aaa7ced17695f932e4f46d1a0e6f6fb"
+      ]
+    },
+    {
+      "canonical_name": "John Fox",
+      "email_hashes": [
+        "26b3c2bfbc5587a1119fc93e98ed6834f6847804a317ae5707e7442251474735",
+        "3a329747a108a9b1a15c8af5ef89b5df2e8cc61ead7aec3fe0fe5b8143e295cf",
+        "731416b233d101927d2e3f8619dfe66ed7f017e2807de2b0c9457d8d0058a3c1",
+        "9fc2f6144953b53eb53d3480f700aed858778cd0863b6b018aa7146c110d813a",
+        "dd43856fc39dd2ced99bd6ff6fc9626bac51a8bc7c594c1cfc5dadcdb34ccd9e",
+        "df0989aba08a80414e0259487d37fe4ab9ec8e81216b490bc4ce2ac5b59beb87",
+        "fb5e585740b7c9920dce8700b35a0da42dc1980ade6aac3a1f02de01be0488d9"
+      ]
+    },
+    {
+      "canonical_name": "Charles C. Berry",
+      "email_hashes": [
+        "040f58714a1a23cffd8d86129cec6e24102a1cbee3dbb4a52a86c71eeac41f26",
+        "15498daf9ece999d667eb0bc2fc7dc0ccabd3ea109150bfd76c7a821a975972e",
+        "2e60b7324e5cc583defcedd7a675a324250ffb84da081638c31baf739e5c08e2",
+        "549516f6a3af6c25021c79cad2926cebc6de057762afe86390727847828d9eb0"
+      ]
+    },
+    {
+      "canonical_name": "Brian G. Peterson",
+      "email_hashes": [
+        "2d44e89a02cb2a9eb2f2113de72098dcb74d077b13b61958f1336c3292aa0254",
+        "5156c75393f43c5e36e55c789f6a1b909f591eb46079141f41127c3bf8ed5547",
+        "8f7d7863b98c36f594dc0b3ee1ea66fe80f3c655487f1e98dd55606a26ed6070"
+      ]
+    },
+    {
+      "canonical_name": "Richard O'Keefe",
+      "email_hashes": [
+        "5f773cfdb86008f3084e93fe3d2439d90a6e170c667bc7b48f638bae8443df4d",
+        "d3358b114c0e48b95203fe8cd4d3df8262ad9ee583c82f31e44c4026997574a6"
+      ]
+    },
+    {
+      "canonical_name": "John Maindonald",
+      "email_hashes": [
+        "0b47bf526150ddb0232030b0f5b0fb75414bec24738cf89be5fb869b7dd581a8",
+        "19d23ff84980e6780fd195a43a65193ab15a0c8fce57a4eeb57e7548488f2c30",
+        "28243693d2a1394c26b2fcd0554a0eef261c6013fc5637e2c42f32fb14e60162",
+        "2de8ee602ec487e8ae8c715c88cb2320b0ddc4a3428764e445cf26eb69ef92c5",
+        "4ee32f6eac1a4a95d8f84a0c9d01bb7e72954907a9c4d4d6f082d9e1cff51e5a",
+        "765ffd54265656b9a5105983c4476ebcc2a260b0f73f3d257b922c9341ad4539",
+        "912d1ef79b53f55098111db1830f5d57b3ca1a0b9aae1a1ad4def6feb75de878",
+        "9347f4330d83591bdd8db8c64a296e95b75d3a40e79272c50241ea685bdb00d6",
+        "b1628b62b368b663eeb7a808cf1c7e03aaedd020f6cc7655ddb9807dbfc58128"
+      ]
+    },
+    {
+      "canonical_name": "Michael Friendly",
+      "email_hashes": [
+        "3ef48d36931377a08641063f9e09600632fb425ae963520be2a77555a4797394",
+        "e9b90ce73178f88f76f93dfc82689bfc2868e9a51ea9a8e011552092e2ee1ae2",
+        "ff9541926dae0dc99ca31cbd541707364ec0f813b57eb19381ec5c2c30ba7552"
+      ]
+    },
+    {
+      "canonical_name": "Peter Ehlers",
+      "email_hashes": [
+        "8942550c7ac3d817d596a1b600a47e0841fb7641ae6759b316eb08e3e9489343",
+        "ff8508a418e1a7d04a0ac1fdb599069bf027bc56c8344eb7ebfbe65177e59a01"
+      ]
+    },
+    {
+      "canonical_name": "Rainer M Krug",
+      "email_hashes": [
+        "09605c8c4105b0c2bf8c813dddf8f9573ca28832d66ef5bcc8bed6ae8379ad16",
+        "157e56ae6c387b32c26749d4c5a2fa1f3d30fe259f3a41322190852de6c6c637",
+        "1c54506f356013c044ac0f443a529ed55b43a5a79b20d7218e75266c764f4069",
+        "382839be3fae27a2aaae0da98772baf0782b6b56d4d7c6ec46e3fbe469277f85",
+        "55a55ba892867d934501a99b67ba7b3fdccbb754fb69238074b43dc58b8e148d",
+        "73f1dc60a1e52df927261a26a7690dde97cf997cebf8ef49209c2cd69b2757ab",
+        "8bdacae83b7666271f744a94cf1404855344088309059b66e31d64d00f2e82dd",
+        "b6a024afb2d35ebd463da3df7ed2726e2c5bbc31740231343fd97f7d0018873f",
+        "c2183b8161af7973d5fc5fcf58524579ff7b543876e3a1d56d6420912ec7f67a",
+        "e11b90edace280d0de30dfc4fa9de87a9a079d3f2c2f179123fa9e4ae628223d",
+        "e3a791d14e130574afdf6597b154dc0e214c3050f8dd05c4c5013174e173f865"
+      ]
+    },
+    {
+      "canonical_name": "Wacek Kusnierczyk",
+      "email_hashes": [
+        "a7412e45907cfb31818d9d6b3d95b7c32e1e7d9c62628e2cd7d1ddc75bcb4883",
+        "e5330a292122db48080734b9fcd18997b49ef92fde8da64b0da705b1a9b6c284"
+      ]
+    },
+    {
+      "canonical_name": "Michael Lawrence",
+      "email_hashes": [
+        "1a5ee30e8b6d6fd023f9cd066f9903301f0b75e038949a90eeb1aac28c844171",
+        "2cf5c45daf2bcfeb581fd328c254e7d124b2d987d065fec7c07ea1d9ddb67b05",
+        "3347405a9e2510967ad231944249ffb3dcbbb766ee0a511933340069ebb6a406",
+        "53457d7bfe19054b68e71eac82c7bde1df5919a79184f9c9b55bb93870319239",
+        "775ce9fc3ea453719040320743a1f4c488567a7e8bc45739500ead72c21220ab",
+        "8bb07c322455a6258dd916a96e9e312b55475745da802619ac9a4a78cf252e3f",
+        "9246dd68647921c643a1c4d6b1e991fd6408c3ffb2a327f0473e9c87561fb6b5",
+        "97cf0a0da2f751e4406150edbd4edaf56e7716d7002ade06690aab4504deef04",
+        "a040d5188131eea4c35590d1ba3f91dccf3ddd0e4eeab9fc32228e869dce9a9a",
+        "a6027e71263c8640b865a407d376f03c26224acac3a69b0cc00df37a7f9bafdb",
+        "bfd2a2f69731a4afd9d68096474a7860f3f4c038c99537d671020f682b543c33",
+        "bfe89466f88aa4e170d0a66a4e53638a9e527ae59f6b2639e8267ad3421950bf",
+        "c36bf863fc6ce4c956c531e3be3c380a9dea26d6f0cbee8fa9df0b1b13a51f2d",
+        "e9ff4b3acc925189bce61741d9f30f26f996837e9604d7ac3a80794d259750a9"
+      ]
+    },
+    {
+      "canonical_name": "Michael Sumner",
+      "email_hashes": [
+        "2e9e45c3ac94e8a53f5f1e8f75b32f4eb03684a3b062cff1c8e21ee1d824f50f",
+        "4d8db92248257cf58a15282ef4b057029dbd45ad2b2c007fbad56eff8864a080",
+        "acd579fb79d1a9375bc76a80cfcc85617e73f5138102204ab0c04aca43dd7766",
+        "ec02820eba6228afb61925d60b233042e6d048081cc8b7f7e46a034ba5ad3d90"
+      ]
+    },
+    {
+      "canonical_name": "S Ellison",
+      "email_hashes": [
+        "2f1fcaa8982f9414acfadcb75943a8c13eedef544c5b7d5cb299a38252feee29",
+        "4e7384549cf34ba7905690915540e47e7bbfb4517e6236655b5f942da2053f35",
+        "57da6c308e3ff2213a4bfe13c89173d165dc7840e1a5fa2e3a797e8dd1f1dda3",
+        "6f6b067ee3f324bcc42a4e337f229547eec398b31dc1f216a9ac21cbac1bb65c",
+        "8ab4ca20c92b6ea03e7c7f7350b2f7dfdb62d59e04b10aa29717a8b032a3da3e",
+        "91aac4f7166fb0204cadf93ab7cfcb749e2fb511f6732ef371207dcbcb6e48df"
+      ]
+    },
+    {
+      "canonical_name": "Jorge Ivan Velez",
+      "email_hashes": [
+        "060ad10c3f62d22ec62f72e51d33b6bd4b3864499ca6dc0a5646c2e462af1f3d"
+      ]
+    },
+    {
+      "canonical_name": "Paul Johnson",
+      "email_hashes": [
+        "003d6a947a8d1f6aa8322b5e860d2070c1e87ed7416e667b6e3b745d4a7b8c7a",
+        "0d5e49787ac4c4e21c8b57887937ca5a517322689ab87909721fdab206dd4a82",
+        "17117aab632dd89806ea44555e0d684a039c8eaf62d723f80f401ea0936d7e17",
+        "2aac84dc2a89516c7ab203de3b841fe9c06d4d6aff6936dba7763d7bc4d3e1aa",
+        "39535fb6d68bd241213126c7497c4b387b8587d36f0f655573d15b4a998aec72",
+        "3e82959e6c3170d20b90b3474e06a7735050f3577859a428fb4cb57c245c4cab",
+        "9829ddaeeed7a3f765879b99182b5732763e3a7710cdd75bfce55bc480259377",
+        "9d0bac9c5f777e1bd51895e44c09add4bee7427bdddc089095537fd2fc4c670a",
+        "a9514fa5b9b480f24aced5419dec6416a8cc8e64c66e7f058399f2571e23c914",
+        "b96b8a38c7fef12892ac8cae395028a3b39f3acce423d9c564ab27dc864c47b3",
+        "d0a0d3be9faaaa7660763903fb57c9a708d6938afbe7920f0f09ff6584a74866",
+        "e00ac9f3da92e21e275c6b58574052300ad954f59f8aaa94df7161bd2e64d86b"
+      ]
+    },
+    {
+      "canonical_name": "Arnaud Gaboury",
+      "email_hashes": [
+        "3fd1ca79c7c6068e196062a46bb8918874de6d5ebc4e1c82dbd5d8787c97a20d",
+        "8d66b3010463ba4609c087a2aec53210a2c80004ddc8ee34092b23f175a5a8d2"
+      ]
+    },
+    {
+      "canonical_name": "Baptiste Auguie",
+      "email_hashes": [
+        "64414105cd63c86b6a7b6ec23562eab8951dad404dee28ebb015deb14cc7f538",
+        "ad9e7b6fc9dff75723dc88afb016155d80a987a096abb3634ff3a4dc8c1da038",
+        "c3ba4321ee2bdb7b0d0af8130fc3c49bd738c1381626b1183f60def24ebd0e3b",
+        "eb58b6b5ae557b42a6fa214d120546f579e2b8b60329f929cf05cd51d346bbf3"
+      ]
+    },
+    {
+      "canonical_name": "Christophe Dutang",
+      "email_hashes": [
+        "3b358a988f07d96a2799db54b5cab52baa36dbb5efb19ff09d0997ec3fc17c2e",
+        "71db47fbb88383c85c0a4105bb9dd5508a39e5eb48ded58e22bd31403fb35064",
+        "767bf2adf77e65292b8430dca3a919b5d13bfe88f6d0d99b1ed60c492fa2779b",
+        "e2ff13abda8df99fe9ddcdddf26b33bea21b4c49c64161451c3526e13c004728"
+      ]
+    },
+    {
+      "canonical_name": "Gregor Gorjanc",
+      "email_hashes": [
+        "3ed6ab7bb707d6a41f2f2b8010e1f5223f0e5b02331474245b901963ba9912ea",
+        "b39c75688faf9190a17a4a292fdf8f9ec6b9f34cb9f4caf4a9101153bea16442"
+      ]
+    },
+    {
+      "canonical_name": "Hans W Borchers",
+      "email_hashes": [
+        "05500165935c8848f1458d3b6b2f2b62581cbe6b36ada9ae6ed2e0ea4ab542c3",
+        "0badbb26b8363467be50fa33dbe136ee9240db15f70e33dc9296accf777027d1",
+        "5b73cebd4c001433fe8a7ab9e75bba4b83b34a6c3268131876f424d21b0038e7",
+        "6748b05efe2990d28cc93b51b8fff7bbefeeb3c546e2f8162894031e41a47763",
+        "c642cefb53f6f4183a447cee1ca1ed032b43bcb5ab78d8923fe7dc821b77804f",
+        "e038aa9bab5d207483259ad08080b68b01ef70384c10e70b1a7757b9cdba0e0d"
+      ]
+    },
+    {
+      "canonical_name": "Roger Bivand",
+      "email_hashes": [
+        "1261638e038d3dcc27d320d8e32593aa20b9df084c5bcac75f9fa75440bc421a",
+        "3634c671f855e50f875222eaa3c2b05ae3c1c28180bd7cd4610d283c9162e74c",
+        "37a3c7637f7cdc3576966201a0fd58853d44abb21284a9eb85afffcb057c33b5",
+        "62eb9306dc98eeb78f2d1fefb3b1d50bb32592b14447c5beea3d517d9117fbac",
+        "6c387c6c5cb27074ea6abbe9d157ef03ec8e1aca6d66b5581cb97736a3a6dc51",
+        "91f65aa45fd0fdb36fd7daf9198b258e051a4ee1b7fd97e0dfad86b52875c989",
+        "a0c87926e9477aa221755cc93bdef47227c3563fd707e66ae49044467663d168",
+        "f6b310463d5258ae3e3e9059ef9124a95d5bde7dc9595a1d4173c5b1bfbc2f4a"
+      ]
+    },
+    {
+      "canonical_name": "David Duffy",
+      "email_hashes": [
+        "073314ccdcf0ab60976bf305cae92a07441776d1e2dc9e5a4d6dacdbd25a2ae5",
+        "4ff8e61ddf9a53df63eb03563d79d0265f18d443380fe3207a240cd8bf2e7e20",
+        "65b90962647f982f69cf3645c4479697f0f3053beb4d6ba9a9e2ddb8f883e9df",
+        "6c8643e8497250712346d6b2367b0a7a1279d492aa9430cdc4bb8faf77a729c7",
+        "d17806e5763e310c9c28e60cd0a3594090d3fbcf32f227baf205da4efdecb88d"
+      ]
+    },
+    {
+      "canonical_name": "Richard Cotton",
+      "email_hashes": [
+        "c905596ee0812452176d79b13b1e1646cad404fdbcecc84f842b20db432ae6e1",
+        "dbe2d04d514d779764a525afa98052b362a23b6d664fa4a04e212cc21978898b"
+      ]
+    },
+    {
+      "canonical_name": "Martyn Plummer",
+      "email_hashes": [
+        "0c6b60e42ec85b9a5447e51fb212047674afc522c0008c5411433f7a7d34514c",
+        "2e099cb1222e34e2ab5938e6ef440a822400d8f04f0d3ca6299b8e1740ceeacb",
+        "7693c50db7c08eba573f31a007ccd03baf26f12e56aa4109883f8f68194f702f",
+        "8d038229f1ee71ae10452a65edb4783350c09f16ad799801602b2225714ff9af",
+        "93b613b211f19df93b61dc45ae8b3866ad2bb05842fb0aab6497b4c88c056067",
+        "a172213f54d02d8c46cd36ac95c2aaea4439b79c8fce553fb5a7295ac50db5d7",
+        "b29bc5ad5637e2c683fd1e64ea425ac0e5fca29d46ff87110a56bf067f65a6c7",
+        "bad7df6428e60802a46077187eab20a1a370b32627a90006d8a8b1573c1a099d",
+        "bcc3467147417e7930b92295d6b6e1e40d825ba4817d5fd5066dc9d092f633fb"
+      ]
+    },
+    {
+      "canonical_name": "Dennis Murphy",
+      "email_hashes": [
+        "217139866f1bbaf5158fbe40160a271aa89df0d9836d26217336ad2dc5fc2c58",
+        "4077bdd1693d31c453c60db60be660e9bc95e6240516dcbff572b76dd5348321",
+        "e4a5a8dffeb093c4485cbdaf24417516db9183251269103e90963889fce45f74"
+      ]
+    },
+    {
+      "canonical_name": "Adrian Baddeley",
+      "email_hashes": [
+        "0a0e76f6b108d4a1bad3941837d331be1eae194226d8adc0ceddc0672c5984c8",
+        "4be4c9026e53dd7d21767d7c3f6172027106a84aa399dd6c579b3d20f0ccb4f3",
+        "63cddde524cb7d011e38c5b10f109e1f51c3841949da4158e29790fcb7084584",
+        "70a6c76b0dec0392b60428b29d569fd06a92ab71896c5908d11f58ed67b88aab",
+        "7c104097fd41e5da3b6a8a0008f23d71f7a3c1dd2ed98149e0886c47591a9f72",
+        "85ec357ba14897ea1485b76adc52e1779ed73429f6a60f2f83ae052c1affd266",
+        "a5377266a8a414e5a7ec23fad745605eaa862debb72cabdbb321e5104810e9cf"
+      ]
+    },
+    {
+      "canonical_name": "Jonathan Rougier",
+      "email_hashes": [
+        "2593df40194a17078b55ef907bd8a2b2f25d8615d3d45a1f1c030068ece8cf17",
+        "6a7647474ff14a274f32f744c7ac99f530ad88d26852f8bef0eb63b4249cabfb"
+      ]
+    },
+    {
+      "canonical_name": "Uwe Ligges",
+      "email_hashes": [
+        "097a7c5a732f1b0233afb1d8bf1f457d12b0dee292721263319fe466e849eaf7",
+        "104c87483880acf2172abe27b608842b6455f9ef1ad2ceef608cdf4d12ad2557",
+        "2d61b878ddbd8cb498eaad13e213f45e20da358dea7c063799b1b3934f86a26c",
+        "33a5f81c045c238cb4ec42a56f0c329f335c4848c293ba90e41675941bace404",
+        "41041d76fae21a8bc18fe19d38def92b3b630abfb7abf4acf41a0734d8851d24",
+        "45a350d378cada8a3e57089106f6764e20345c5c1895ff406d935d8da081657d",
+        "5d2495cd9f95d5b8b60996473b8c2392ad3c1c18d854533e81ddcf292c1497f0",
+        "6e505c9898fda7dea05531ccd94b4c8e165b3639228a9f6dcc0368da5f09b882",
+        "c17cae670f8f8c752d6cde87e94fcb58a5bfee16d5d4c88c9cb2b95d2275685b",
+        "ccdc52622f33dd8f305f93b90cfbf7116d11a351603e892e70ee5002b643ddc7"
+      ]
+    },
+    {
+      "canonical_name": "Mark Bravington",
+      "email_hashes": [
+        "1760727dbf1df1aa8a04bf9be4b052304a85c59263f79bf5814d7216d8dccc9c",
+        "5a11f8e6de417c7560e3824c71b0eec2a168ed8249d192c939ce927c72435ea0"
+      ]
+    },
+    {
+      "canonical_name": "Deepayan Sarkar",
+      "email_hashes": [
+        "020e17c245cd36adafe1b38bf8b2d966df21273089c8563116946ee62e4652bf",
+        "165d83e9118aa3f1d083ed6f4cdf818468ed33a7eb4d78c40f6ca7983196f998",
+        "27028ab23bfaf5f572814e132ac67c99301e67d403a99e69472111b4d39c1b71",
+        "548807517fabf45d2a5a3653fc4824075531e1392ff49ca3c7eb0dadcd58c011",
+        "579c300cbb43b33d45a128082a097b1f9c1ea3f604e6beee151d9728e2d977e3",
+        "8ea9be97512ee2f8cd96b2e3a0e69e2462fbf028237cd674ccf6924bb378bdda",
+        "b4fbbacfa2f8ab312126c2bec538a5949ee2f38128cac8952ffc3965e8050ec6",
+        "da20c1efdfdd448a71b20da6e2500e3a2016b67041d1d9ab7648cdcce3bad7e5",
+        "e2f6c1c06815045681b456968d2e109321e5194ba71ca82f1f6f312db1508e36",
+        "fa7cd18e8aabec28b1c7ad2f082e4585b0a924d4ab9e0fa7da5fe77aaaada8df"
+      ]
+    },
+    {
+      "canonical_name": "Dieter Menne",
+      "email_hashes": [
+        "c7274b9bd46c9b3353bed705ed75d56d9deb9cf175a43e7f3c56be62d1d3d880",
+        "c7eec2cce42570d33d4f9c8d663406043df18a4db3135fe86a6126b230c5bba7"
+      ]
+    },
+    {
+      "canonical_name": "Gavin Simpson",
+      "email_hashes": [
+        "31f7ba36a563b5eca36e625f15e85aeb59193b69ec8f0245730163b3c9a96f7e",
+        "58add0b466097570af4fc2db149715e659937a31492dc23dbcbc4da7c2628f70",
+        "be72af3926045f7958d251cd7f2a523e955cb446573a7d00c72607367166e5fe",
+        "d4b6f008c4c5158667bb80a145897e16b1335189ecc5759b14ee7c011dcddcd9",
+        "de29578fbbb79e6883c8203a1faebef3fddd10c08cc122f35e5ad109dc250099"
+      ]
+    },
+    {
+      "canonical_name": "Barry Rowlingson",
+      "email_hashes": [
+        "099e2790da585f0b9c742d469d9c4bd90fa3b23c8928604cf6661816d4e6ac5d",
+        "0a612c58e84a470ea72c786929abc7840353b66d3dc7ac5e89e505330f3012a0",
+        "2f2ae120188e65c3bfd944441b32cfce407b40eed700d0d89a25179a0c53a80b",
+        "5d15270881056522f5b029febf8218bb2f554afa2824ded71e9c2c0b65474f10",
+        "6a346856cbcd851b9e74edc545d17b28425c62de21d186aff5329be0ac0fe29d",
+        "94f5c718996fafe3dcf7003ba82c6656414e43b8d3f2b04af298250f493ba5eb",
+        "978d93eeccd73f54cd1080f2010d589bc57743b6aeffbe86b0c01e659efa8282",
+        "d992dc8c7701258dafb725629b4bdcc346e4592cf9f5db84c9b50e39b17a0e06",
+        "f6411218bee540bc26d90d77e5a456277aa788c6f0e64f1fedc3b1ecb051639e"
+      ]
+    },
+    {
+      "canonical_name": "Henrik Bengtsson",
+      "email_hashes": [
+        "0195b5651ca66f1d0738d42877cd4b486183f620a64c4eafdfc8840f05d4ecd1",
+        "37708a6cb782f5feaf8184aa0c29ee7a2d00c5c1bcf512308a95d10fa8393e79",
+        "4861a2b833132ccee758def2caa0ac4dc6bbdf1b2c4e2f28a1b1b8a43ceeb278",
+        "4b3b325a544f29a71023a4321f90aa1dc760e9301c83927ca0d941e6cc312de9",
+        "64a3206ab5ef5f3eb33045076d839aa0671d85aac05489628035c18ce53b4a6e",
+        "9990c0a46f707a7b7a32dc78108db722c1ccf39a8c5733e31eb392daba5a47ca",
+        "a578bc6fcbd48aad24b4b0f4186124fb1b69f77c14884741fd6a4c1cac8fc3bb",
+        "c5f7d707855e6bb7ec280aab1562d5b1c9b9adbf9c78f7d90cc0fc0523b614bc",
+        "daa58e06001e7e8d35f96d36ab706529e5c23debcf92f03a2a6ead8a5ffb32a0",
+        "f1a865fcb35fd0a72477eda519359b2a1d10ba105e5667d04492a6f87db61563"
+      ]
+    },
+    {
+      "canonical_name": "Ko-Kang Kevin Wang",
+      "email_hashes": [
+        "362b0d695217ba61fbc306df7235ecc652e33e9364f000f2d3c76af0d0765689",
+        "46cd6fa57132d0b609ba808cd6f7a94580bff0eb0aafe69e394cf6e53d134ada",
+        "4a291c53e46a07d2bd55f2fa4540e6f79dc0c79a67c184b67acb0a9ae8ca3704",
+        "750b50987e986071086093d8c545585ece566a2382c4d04d44b039bbc2c08050",
+        "8901dce0bbef75e9d28187c89caf69879323482d1a759c85474b540411c8cc12",
+        "c32d1e9f9c5d2eb2a78180845d298051f4a97892b723812377446b7532aba922",
+        "dcf2d1b1e63d6b92d7c07e903980fe52954d7a33f194a5b32d6b5eeb722d168f"
+      ]
+    },
+    {
+      "canonical_name": "Achim Zeileis",
+      "email_hashes": [
+        "5d0666ce9b4ba3eb5d16d8dda715c40e6659f1707b7e9d0727ac8d70b93c8461",
+        "69af046539bd879fe7835f0926d7a6654bf24bbc38b8ffbefc003ff1ed9ef3d3",
+        "6e49297fad7765f22cd60c47d1bcff4db34d823c694d0bd3180ec417368c4a57",
+        "91c90a6f0fa9c855967aa0aeaf0b0f6ca14595f1507fa5d727ba081d51b68da1",
+        "a3898362d2961a86696818123ed6017299b88343a2280efbcbbd1f340f19d948",
+        "a895ad0e6566b8984b2144fdda4837494115f9ced299c1cc350c2a22e1c5a8fb",
+        "b10f5104546189818641bf69395d90db4093d0e2d9ed4aa9a3cb251bb0023bbe",
+        "bd2eeb44980616d362ae41039f127afb285d7262417cbaf7ec7185ac64539723",
+        "d36389231a7177543f3cb8986ece86081c7aa49225867919c981f392636561f8",
+        "d766623ae20ff5eea9df5809187df08da7b9ac247d6072a1908ecce0219ab3e0",
+        "f67def541d3178797963a71ca3ac781054a933f1eec7575d3464fb2a7aa00da4"
+      ]
+    },
+    {
+      "canonical_name": "Christopher W. Ryan",
+      "email_hashes": [
+        "1713305274d2c1816a07f0aa50c9577759f9e9c6829b63a608da0a2c0dd2c647",
+        "1b29f9cec300eaee17dfd69d1f61fa0ef3e03d1c3e99be2390ec65184340c413",
+        "51d88c96d7b47672f8ce485ca9465c4fe4687413183f23fc449a38371065f36e",
+        "97633a89d7b4b2c7d03f55ef908430710c5e5a27b575aa0bc0d2b6b5bf131502"
+      ]
+    },
+    {
+      "canonical_name": "Adaikalavan Ramasamy",
+      "email_hashes": [
+        "2c70d00beaeab6b001cfa7f3381549aebcd0bf6f7275bbec1d9d9f5ed207f2a2",
+        "7d1cb4ecf0849e0f9bf94825e1575c3ab74ec2729d20c481043200f75946cada",
+        "9c0e025e46161723dce41d0966df9036fc79c887c76d471292c2b7c2896f5300",
+        "9dd8577875e82c53585a6a1a1ade10a549bf188a95960cadfecb47bc81748023",
+        "cc2001209f6d3f5984d3bb7b623dc9189a67cc6d6675ce4e240d8a834fd64dfe",
+        "ccf9509e016ed4ad126fa3ff11eaf85c1076528b45e1fd02ac95c2ed81800ea6",
+        "fb7b1fa7cb096dcb53dbfd8341386afc90fa48c26687aa1b6d9942692e3f57f5"
+      ]
+    },
+    {
+      "canonical_name": "Adrian Dusa",
+      "email_hashes": [
+        "08f405507ac687741364700c3283681d6a9bc9b1d96b171d3bdccbc9cc7be1a2",
+        "0adf325a6f5cc3417b78ab9f04c87fd96893831035070b13aabdf34b83338b0f",
+        "6a403e8d36067b9a5490b33c3f9b771c8b9fb11b65319c8b0ebbaa42146b32c8",
+        "c2afa4ff7eed7dfe3736cbfeb5723dea0a873413a6046e0927e8e7e940d7308f",
+        "c7eb80271393ed831f0ae78107a15bf2f527ce148e6d2808ba6b98398c1130f7",
+        "e33a2b333bf33e5a02ad875b1f10006293adb45d47f464e4612f6967fd8d8ce5",
+        "e5655bef963945c7ef49d6b0d71280741b2077d156d9ad473352fd597ec8ee66",
+        "f06e218fe78e9d61554b5523c11fdb063d19e3aea06d22f47297474466ff2c45",
+        "f576910e6f3782489fe4a8fdc8a216955c9f5269cbacc28a16a223f5bd4d774d"
+      ]
+    },
+    {
+      "canonical_name": "Highland Statistics Ltd",
+      "email_hashes": [
+        "d43054e1bf20a3b5b133a436acf0fb618425fad892ef36118bc175ac01f3183d",
+        "d43d2d185a788ccd19e7f5dd07ff6ab5885eda9aec644e0dbc37b2c770958942",
+        "f776a51d77a39cbecb72dfa34cf16f855449a5fe25c7547df2773f0b2a639de6"
+      ]
+    },
+    {
+      "canonical_name": "Sundar Dorai-Raj",
+      "email_hashes": [
+        "a4269326b27117802b49aaccfc432ea6e46560eff1bc6a101a01f0ab9e51bc3a",
+        "a608bf8cb9c8712c1f84b0be223a3d52b0355e4620e94ca764bd0c59c7a321ad",
+        "ac2c634a66bfd4b92f22c1a5b2b6f7e05e85b6ba3c0356381de94540481fd269",
+        "bbe8432d657a41febf950a60fb063704e7bd366284b37f28f250959d93caf11d",
+        "eb4f0e323f9635234e5ff005fe7540ae46dabead0ad239200296a4be11ef4f46"
+      ]
+    },
+    {
+      "canonical_name": "Iñaki Ucar",
+      "email_hashes": [
+        "0faf0f82f2ae7a03780f35561a3913efe7fa8a6118b8feae1bd8f2f6c8ab74c8",
+        "16318610b0621446e3c5d70993d944838cabdf1e979e93906e36793906af0c72",
+        "21beb4b39bb4391fffc89ac5ef1f20767eb7f7045be9813a5907d86c8581d3a4",
+        "451ad0824b556b4a2546964b90833f6bb49c696aeeb2a952300d8c4f195260fe",
+        "47657a5f56ea3d5b5c3f07746bcf3ccae957a498748935aaf0369c4b44bcda96",
+        "8e930e9d3254a7fa7e786bc5a69418a943c040e7679d642aaceaf002d44403e6"
+      ]
+    },
+    {
+      "canonical_name": "Alexios Ghalanos",
+      "email_hashes": [
+        "1b7f65afe2561f54160034516afa74832dbbeb84a86b8b9fb7fe05ea755a2acb",
+        "a96d1f9bc31603cc8b7738f0d9a0b72c41ec7e0b943e1806c497adc2018497a3",
+        "f12a89c6562792937246cb8bec959797c75bc6b52bac14749297d96240c05c5f"
+      ]
+    },
+    {
+      "canonical_name": "Agustin Lobo",
+      "email_hashes": [
+        "1ceaac12c09b1ae4beabcab1289c18094cb8622c5687af51641f19f0cbe4dc74",
+        "1f2e8e07ecc56d2bb1d0350ee5b6a2f021c57e1deae5af547a1e408df4a49bc5",
+        "3ae3791a3a4f5ff750201eba8d400cb3182b03a5b09b3e102fbacc0a6b6bf799",
+        "443620bb3a44b62e6969f3f4b2f8cc91b816d6f17a0d7d3d5ca4883a44774c09",
+        "5d51b5e6b740b1a0ab2dd555fe9b450259707ad1ba0352179a0e903f6b2e48fa",
+        "904afa1192b5c5769db5a1ae5b21005f96c837b5ba35a20a3116ee449d7827da",
+        "a0d6565f2f2d644f4eec8b389dfc70470ff874ed764bace37ab5206d0641eb68",
+        "b7fde75e33862bf3ff7e6dad3c67daee92c017baa9c2c3114430838483d9c33c",
+        "dfec104f4224acc8c2bbb3a5878344090786f851f480cbd0a53ab061bd7e0c92",
+        "ea5ec0386edcde1036c18fc01964373a90ecf51c0cffff7804c16e41cd95febb"
+      ]
+    },
+    {
+      "canonical_name": "Bob Rudis",
+      "email_hashes": [
+        "06069ff8bf65af0cc1ddc4f9da6c2a365b90baa3c37e0a4c63565522e5804ed8",
+        "1825b2a2b76d0395326fce49d356e345a27463d5516c4e24d619f31bfed1b0e6",
+        "a26d124c455064db4d60c538894063c0f8cb488637af120b1e3326571e017cd6"
+      ]
+    },
+    {
+      "canonical_name": "Eliza Botto",
+      "email_hashes": [
+        "2d0893433f81af9b01fc7530109414d82a1badffa42061edbbda159c1f6bd35d",
+        "ce54bc3b361018c3cb8cdc4a0d939f8cbfcbe2414cec74387e54516acb17da38",
+        "d75cccd9654dd26dc8f58fe0fe57a71313d6df0b303ca376f734680eee7153f9"
+      ]
+    },
+    {
+      "canonical_name": "Elaine Kuo",
+      "email_hashes": [
+        "470705e267897a98dd683dc3c0827f34ecf5b91200288a164f0ef146f3815587"
+      ]
+    },
+    {
+      "canonical_name": "Ben Pelzer",
+      "email_hashes": [
+        "3a54651fb6eecda94126183b3dbd111a28cddc058e79ea2b66e47c8cf620b873",
+        "45d723a9cec3fb2f612bdd91b4835b5b9168eed4e51d714a6cef496b1dd973bb",
+        "b26e60fa670015789f86b0a5a8e6573f2a19e76b54ebb53586ef0142ca7dcd1f",
+        "c74566c142643bbafb2f3afbd518be5b95e7ac855fec610064cbd4bc3536d3f5"
+      ]
+    },
+    {
+      "canonical_name": "Bernardo Rangel Tura",
+      "email_hashes": [
+        "25b891f76c0e120994cbc1b588edc7582e65fd73de3f7cd7a18455624660ef54"
+      ]
+    },
+    {
+      "canonical_name": "Chris English",
+      "email_hashes": [
+        "251d28d9bc0e5243952f6ffe95556d5d473cdb34f0d80c5e376b52eac4fddd59",
+        "5e59b72a25b4ba25cc166ca2a0967812f913b85491480ba492ebf3b64f011fb7",
+        "be708bd65c67bf9dc569aaca2fc47c514fda1d8378ae8bda3840b371a5ad8aac",
+        "e0e64fe860f0108959532ebe47433c84e4431a094c24614c8ba293b214a6ef86"
+      ]
+    },
+    {
+      "canonical_name": "Chris Howden",
+      "email_hashes": [
+        "14939029110e4d70b99fb3dbeee6d93fc79592c32d626d073fde0dd1128532ce",
+        "bbdec2e04abf59f843bf0c0e35839b8f1f185be6ecf8916450748d71b81d93a9",
+        "bf0d499799bf682ad766b5f0eb9281d96f29beb8672c5fe4ecc682773847fcbb",
+        "c01e2fadab9d76b087ffd84fce8fe92777964edcbf6bcd6f534a214c6e34d03d"
+      ]
+    },
+    {
+      "canonical_name": "Chris Mcowen",
+      "email_hashes": [
+        "33aced205105fa5dc05b2477c9bb41c3548d97e2adced98d62764749a81f1659",
+        "4551bf195595a17785f8ef04b14267b1de4d99b8acf329974c7c459f37354861",
+        "6fab00701a27718deb38c1f1c2baf9cd35ef33db7a923956068f318e2b2802b6",
+        "95612baa294ed1bbda7e1bb0141e56d5c2c58e682b145685c63a97288319ba86",
+        "97978c38348277f26710235831b7bd1e994159c46e54a01561e08e55a11ccbb3"
+      ]
+    },
+    {
+      "canonical_name": "Christian Schulz",
+      "email_hashes": [
+        "89177b0e4a02b32c88b56dd17d3919a862942447dc064feb0b6d76402168170d",
+        "902945061f36da417eb7d786cacd2bd94fdee6e5eb04bb58138d1a0d45d421c3",
+        "ac7911e9ea9c480cf0ed9a9400761d330fade252e90386222cceba36a4bbf486",
+        "b1e6c45a5204155cfd0c5bb788af02194a5286ac01d4c63314ed647affad39ec",
+        "c843270ea4fde674a679ef713c1680710f05a80e710db6f3d1bcd6b6e68aa60c"
+      ]
+    },
+    {
+      "canonical_name": "Christophe Genolini",
+      "email_hashes": [
+        "188243ef6b743b8d3cdd972d5ac76d36899f18656fb52ce7f6a8f452409f5017",
+        "b604039c755fd2a2fc93c249f688c352de24b5986d3b3b8d870ba634f5419945"
+      ]
+    },
+    {
+      "canonical_name": "Thomas Lumley",
+      "email_hashes": [
+        "15730459e9f2191122a0f556460299bb9351b6117640bcd2636ad66dc2cdb86e",
+        "60fdc99bfa1a4248ed0e1078a1a8b5e8456b227f0ea827e4afdee2878515e5b7",
+        "61bcce0fdf9d5f23a30b727658d7a47ac11811000a72b388d394906e16dc4416",
+        "7d3e82acd7a177485858a278f82b82d7e665640301fe16d4c1d9312e4963cff3",
+        "97f8f53d46eadfca6ae6bab610442936e98a93a42fc1e879d1fc0ff34803d639",
+        "fd3f6e9367b335430f74a8f6feb36e5e9d187865079d5ca2018b64dfb89dd278"
+      ]
+    },
+    {
+      "canonical_name": "Göran Broström",
+      "email_hashes": [
+        "286b7dd06192be4df3932fddf6439b9380977e1d5f916253a911deba548d8001",
+        "376840d8baa21d21bf9d55113270cc342e6b17e5091d8225e2a000e82ab32727",
+        "378d288de6c21b685f337f051f1283bb79947620bb8e740838f6a1472372f90a",
+        "66e592a12cd1e56cd7a2efa08753111907fa15843f0a9978328deaf6f059b9dc",
+        "69c2552223aa562b993c39c9d565e8016e05c1dbb8bf0d58e315f5489f407a25",
+        "a5c32d25a912fd2e7d07bfdf35a470dbdd4bb162dffcf7d688b64aeeb247d678",
+        "bfe299a455231e26d08d94fcda2b0df05ac89ec3d25858321049461460a4f1ad",
+        "cea40acf6ba2bed3b58950f27117f47b338f4abb21ec979decbc57c1d3a639e0",
+        "d882e1b53768446644db7c1fb7ab095519b940ded80418e8e52e9d9f31e2c5c4",
+        "e82ae631092f9baef7775fd43040adeee4ff3e6db9504fb9beed71d2cd03325a"
+      ]
+    }
+  ]
+}
