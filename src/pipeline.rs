@@ -307,7 +307,8 @@ impl StatsAccumulator {
         self.total_threads += thread_count;
 
         for msg in messages {
-            let date_str = msg.date.to_rfc3339();
+            let date_utc = msg.date.with_timezone(&chrono::Utc);
+            let date_str = date_utc.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
             // First/last date
             if self.first_date.is_none() || date_str < *self.first_date.as_ref().unwrap() {

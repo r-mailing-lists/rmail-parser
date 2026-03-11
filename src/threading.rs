@@ -117,7 +117,8 @@ pub fn reconstruct_threads(messages: &mut Vec<Message>) -> Vec<Thread> {
         let root_msg = &messages[root_idx];
         let thread_id = generate_thread_id(&root_msg.message_id);
         let subject = root_msg.subject_clean.clone();
-        let started = root_msg.date.to_rfc3339();
+        let started = root_msg.date.with_timezone(&chrono::Utc)
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let root_message_id = root_msg.id.clone();
 
         // Collect participants and find last reply date
@@ -141,7 +142,8 @@ pub fn reconstruct_threads(messages: &mut Vec<Message>) -> Vec<Thread> {
             message_count: member_indices.len(),
             participants,
             started,
-            last_reply: last_reply_date.to_rfc3339(),
+            last_reply: last_reply_date.with_timezone(&chrono::Utc)
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             root_message_id,
         };
 

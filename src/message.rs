@@ -5,13 +5,38 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+/// Serialize DateTime<FixedOffset> as UTC RFC 3339 so that lexicographic
+/// string ordering matches chronological ordering (avoids timezone-offset
+/// comparison bugs in SQLite ORDER BY and PHP strtotime).
+mod date_as_utc {
+    use chrono::{DateTime, FixedOffset, Utc};
+    use serde::{self, Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(date: &DateTime<FixedOffset>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let utc: DateTime<Utc> = date.with_timezone(&Utc);
+        serializer.serialize_str(&utc.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<FixedOffset>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        DateTime::parse_from_rfc3339(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub id: String,                    // "msg-<12-char-sha256-of-message_id>"
     pub message_id: String,            // original RFC 2822 Message-ID
     pub from_name: String,             // display name extracted from From header
     pub from_email_hash: String,       // sha256 of de-obfuscated email
-    pub date: DateTime<FixedOffset>,   // parsed date
+    #[serde(with = "date_as_utc")]
+    pub date: DateTime<FixedOffset>,   // parsed date (serialized as UTC)
     pub subject: String,               // original subject
     pub subject_clean: String,         // subject with [R], Re:, Fwd: stripped
     pub in_reply_to: Option<String>,   // parent message ID
