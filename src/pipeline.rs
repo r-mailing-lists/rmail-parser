@@ -270,11 +270,13 @@ struct ContributorAccum {
 }
 
 impl ContributorAccum {
-    /// Returns the display name with the highest message count.
+    /// Returns the display name with the highest message count. Names used
+    /// equally often tie-break on the name itself, so the choice does not
+    /// depend on hash-map iteration order.
     fn canonical_name(&self) -> &str {
         self.name_variants
             .iter()
-            .max_by_key(|(_, count)| *count)
+            .max_by(|a, b| a.1.cmp(b.1).then_with(|| b.0.cmp(a.0)))
             .map(|(name, _)| name.as_str())
             .unwrap_or("")
     }
@@ -396,8 +398,9 @@ impl StatsAccumulator {
             .with_context(|| format!("Failed to write {}", index_path.display()))?;
         eprintln!("Wrote {}", index_path.display());
 
-        // message-order.json — [[msg_id, month], ...] sorted by date
-        self.message_order.sort_by(|a, b| a.2.cmp(&b.2));
+        // message-order.json — [[msg_id, month], ...] sorted by date, then id
+        self.message_order
+            .sort_by(|a, b| a.2.cmp(&b.2).then_with(|| a.0.cmp(&b.0)));
         let order: Vec<[&str; 2]> = self
             .message_order
             .iter()
@@ -434,7 +437,11 @@ impl StatsAccumulator {
                 }
             })
             .collect();
-        contributors.sort_by(|a, b| b.message_count.cmp(&a.message_count));
+        contributors.sort_by(|a, b| {
+            b.message_count
+                .cmp(&a.message_count)
+                .then_with(|| a.email_hash.cmp(&b.email_hash))
+        });
 
         let contrib_path = output.join("contributors.json");
         let json = serde_json::to_string_pretty(&contributors)
@@ -538,8 +545,10 @@ pub fn run_parse(
         let month_map = all_by_month.remove(&month).unwrap();
         let mut month_messages: Vec<Message> = month_map.into_values().collect();
 
-        // Sort messages by date within the month
-        month_messages.sort_by(|a, b| a.date.cmp(&b.date));
+        // Sort messages by date within the month. The id breaks ties: the
+        // messages come out of a hash map, so without it two messages sent in
+        // the same second would land in a different order on every run.
+        month_messages.sort_by(|a, b| a.date.cmp(&b.date).then_with(|| a.id.cmp(&b.id)));
 
         let threads = reconstruct_threads(&mut month_messages);
 
@@ -764,7 +773,7 @@ pub fn run_aggregate(input: &Path, output: &Path, aliases_path: Option<&Path>) -
         .into_values()
         .map(|a| {
             let mut lists = a.lists;
-            lists.sort_by(|x, y| y.count.cmp(&x.count));
+            lists.sort_by(|x, y| y.count.cmp(&x.count).then_with(|| x.slug.cmp(&y.slug)));
 
             let yearly: BTreeMap<String, usize> =
                 a.yearly.into_iter().collect();
@@ -788,7 +797,11 @@ pub fn run_aggregate(input: &Path, output: &Path, aliases_path: Option<&Path>) -
         })
         .collect();
 
-    contributors.sort_by(|a, b| b.message_count.cmp(&a.message_count));
+    contributors.sort_by(|a, b| {
+        b.message_count
+            .cmp(&a.message_count)
+            .then_with(|| a.email_hash.cmp(&b.email_hash))
+    });
 
     let json = serde_json::to_string_pretty(&contributors)
         .context("Failed to serialize aggregated contributors")?;
