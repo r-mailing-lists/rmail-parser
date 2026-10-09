@@ -167,8 +167,9 @@ pub fn reconstruct_threads(messages: &mut Vec<Message>) -> Vec<Thread> {
         messages[i].thread_depth = depth;
     }
 
-    // Step 8: Sort threads by start date
-    threads.sort_by(|a, b| a.started.cmp(&b.started));
+    // Step 8: Sort threads by start date, then id (the groups above come out
+    // of a hash map, so threads starting in the same second need a tie-break)
+    threads.sort_by(|a, b| a.started.cmp(&b.started).then_with(|| a.id.cmp(&b.id)));
 
     threads
 }
