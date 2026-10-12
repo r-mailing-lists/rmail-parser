@@ -2,5 +2,6 @@ pub mod mbox;
 pub mod message;
 pub mod output;
 pub mod pipeline;
+pub mod source_page;
 pub mod sources;
 pub mod threading;
