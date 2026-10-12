@@ -17,6 +17,13 @@ pub struct PeriodSources {
     /// means the page has been fetched; an empty value means it had nothing
     /// to restore. A `BTreeMap` so the keys are written sorted.
     pub fixes: BTreeMap<String, String>,
+    /// Page number -> the Message-ID that page names, without angle
+    /// brackets, for every page that was fetched and turned out to belong to
+    /// another message than the one it was paired with. Indexing the period
+    /// again links such a page only to the message it names. The field has
+    /// no default: a file written before it existed is refused, not read as
+    /// a file with nothing rejected.
+    pub rejected: BTreeMap<String, String>,
 }
 
 const MONTHS: [&str; 12] = [

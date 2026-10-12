@@ -117,7 +117,7 @@ fn test_sources_with_nothing_left_to_fetch_says_every_period_is_up_to_date() {
     let _ = std::fs::remove_dir_all(&out);
     std::fs::create_dir_all(&out).unwrap();
     // The fixture's period, with both of the pages it needs already fetched.
-    let complete = "{\n  \"period\": \"2026-October\",\n  \"articles\": [\n    \"084714\",\n    \"084715\",\n    \"084716\",\n    \"084717\"\n  ],\n  \"fixes\": {\n    \"084715\": \"\",\n    \"084716\": \"\"\n  }\n}\n";
+    let complete = "{\n  \"period\": \"2026-October\",\n  \"articles\": [\n    \"084714\",\n    \"084715\",\n    \"084716\",\n    \"084717\"\n  ],\n  \"fixes\": {\n    \"084715\": \"\",\n    \"084716\": \"\"\n  },\n  \"rejected\": {}\n}\n";
     std::fs::write(out.join("2026-October.json"), complete).unwrap();
 
     // A budget of zero again: were anything asked for, the run would stop

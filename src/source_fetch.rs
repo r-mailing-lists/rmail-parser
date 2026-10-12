@@ -276,6 +276,12 @@ fn update_period(
     budget: &mut Budget<'_>,
     report: &mut SourcesReport,
 ) -> Result<Option<String>> {
+    // A message that does not parse keeps its place, as it does in `parse`.
+    let parsed: Vec<Option<Message>> = raw_messages
+        .par_iter()
+        .map(|raw| parse_message(raw).ok())
+        .collect();
+
     let mut current = match sources::load(out_dir, period)? {
         Some(known) if known.articles.len() == raw_messages.len() => known,
         // No file yet, or the raw file has changed length since: index it.
@@ -294,29 +300,40 @@ fn update_period(
                 .iter()
                 .map(|raw| subject_key(&raw_subject(raw)))
                 .collect();
-            let articles = align(&keys, &index);
+            let mut articles = align(&keys, &index);
             // A page already fetched stays fetched for as long as the index
             // lists it, whether or not a message is linked to it just now:
             // the index can be ahead of the raw file, and the messages it
             // unlinks are linked again once the raw file has caught up.
             let listed: HashSet<&str> = index.iter().map(|e| e.number.as_str()).collect();
-            let mut fixes = stale.map(|s| s.fixes).unwrap_or_default();
+            let (mut fixes, mut rejected) = match stale {
+                Some(stale) => (stale.fixes, stale.rejected),
+                None => Default::default(),
+            };
             fixes.retain(|number, _| listed.contains(number.as_str()));
+            rejected.retain(|number, _| listed.contains(number.as_str()));
+            // A page that has said whose it is goes to that message only.
+            // Pairing by subject would otherwise hand it back to the message
+            // it was taken from, and nothing would look at it again.
+            for (i, article) in articles.iter_mut().enumerate() {
+                let named = article.as_ref().and_then(|number| rejected.get(number));
+                if let Some(named) = named {
+                    let own = parsed[i].as_ref().map(own_message_id);
+                    if own != Some(named.as_str()) {
+                        *article = None;
+                    }
+                }
+            }
             let indexed = PeriodSources {
                 period: period.to_string(),
                 articles,
                 fixes,
+                rejected,
             };
             save_period(out_dir, &indexed)?;
             indexed
         }
     };
-
-    // A message that does not parse keeps its place, as it does in `parse`.
-    let parsed: Vec<Option<Message>> = raw_messages
-        .par_iter()
-        .map(|raw| parse_message(raw).ok())
-        .collect();
 
     let mut unsaved = 0;
     let mut stop = None;
@@ -333,7 +350,7 @@ fn update_period(
         match budget.ask(&url, parse_article) {
             Asked::Got(page) => {
                 report.pages_fetched += 1;
-                if names_another_message(&page, msg) {
+                if let Some(named) = other_message_named(&page, msg) {
                     eprintln!(
                         "Warning: {}/{}.html is not the page of message {} in the raw file, unlinking it",
                         period,
@@ -341,6 +358,9 @@ fn update_period(
                         i + 1
                     );
                     current.articles[i] = None;
+                    // Written down, so that indexing the period again does
+                    // not pair the two a second time.
+                    current.rejected.insert(number, named);
                     report.mismatches += 1;
                 } else {
                     let fix = fix_string(&msg.body_plain, &page.text);
@@ -407,15 +427,20 @@ fn raw_subject(raw: &str) -> String {
         .unwrap_or_default()
 }
 
-/// True when the page names a Message-ID and it is not this message's.
-fn names_another_message(page: &ArticlePage, msg: &Message) -> bool {
-    let own = msg
-        .message_id
+/// A message's own Message-ID, without angle brackets, as a page names it.
+fn own_message_id(msg: &Message) -> &str {
+    msg.message_id
         .trim()
         .trim_start_matches('<')
-        .trim_end_matches('>');
+        .trim_end_matches('>')
+}
+
+/// The Message-ID the page names, when it names one and it is not this
+/// message's. `None` when the page is this message's, or cannot say.
+fn other_message_named(page: &ArticlePage, msg: &Message) -> Option<String> {
+    let own = own_message_id(msg);
     match &page.message_id {
-        Some(id) => !own.is_empty() && id != own,
-        None => false,
+        Some(id) if !own.is_empty() && id != own => Some(id.clone()),
+        _ => None,
     }
 }

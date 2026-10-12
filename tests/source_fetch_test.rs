@@ -59,7 +59,7 @@ fn test_first_run_indexes_the_period_and_fetches_only_the_pages_it_needs() {
     );
     assert_eq!(
         fs::read_to_string(out.join("2026-October.json")).unwrap(),
-        "{\n  \"period\": \"2026-October\",\n  \"articles\": [\n    \"084714\",\n    \"084715\",\n    \"084716\",\n    \"084717\"\n  ],\n  \"fixes\": {\n    \"084715\": \"\",\n    \"084716\": \"\u{f1}\u{e4}\u{2019}??\"\n  }\n}\n"
+        "{\n  \"period\": \"2026-October\",\n  \"articles\": [\n    \"084714\",\n    \"084715\",\n    \"084716\",\n    \"084717\"\n  ],\n  \"fixes\": {\n    \"084715\": \"\",\n    \"084716\": \"\u{f1}\u{e4}\u{2019}??\"\n  },\n  \"rejected\": {}\n}\n"
     );
     assert_eq!(
         report,
@@ -440,6 +440,11 @@ fn test_a_page_naming_another_message_is_unlinked_and_gives_no_fix() {
     let saved_period = saved(&out, "2026-February");
     assert_eq!(pages(&saved_period), [None]);
     assert!(saved_period.fixes.is_empty());
+    // The pairing is written down, with the message the page says it is.
+    assert_eq!(
+        saved_period.rejected,
+        [("000101".to_string(), "someone-else@example.org".to_string())].into()
+    );
     assert_eq!(report.mismatches, 1);
     assert_eq!(report.chars_restored, 0);
 
@@ -885,6 +890,8 @@ fn test_a_fix_for_a_page_the_index_no_longer_lists_is_dropped() {
             period: "2026-February".to_string(),
             articles: vec![Some("000099".to_string())],
             fixes: [("000099".to_string(), "\u{ef}".to_string())].into(),
+            // ... and page 000098, which had named another message.
+            rejected: [("000098".to_string(), "gone@example.org".to_string())].into(),
         },
     )
     .unwrap();
@@ -911,6 +918,8 @@ fn test_a_fix_for_a_page_the_index_no_longer_lists_is_dropped() {
     let after = saved(&out, "2026-February");
     assert_eq!(pages(&after), [Some("000101"), Some("000102")]);
     assert_eq!(after.fixes.keys().collect::<Vec<_>>(), ["000101"]);
+    // What was known about a page that is gone goes with it.
+    assert!(after.rejected.is_empty());
 }
 
 #[test]
@@ -1143,4 +1152,92 @@ fn test_a_body_line_starting_with_from_takes_a_position_of_its_own() {
     let saved = saved(&out, "2026-February");
     assert_eq!(pages(&saved), [Some("000101"), None, Some("000102")]);
     assert_eq!(saved.fixes["000102"], "\u{ef}");
+}
+
+#[test]
+fn test_a_rejected_pairing_is_not_linked_again_when_the_period_is_indexed_again() {
+    let raw = scratch_dir("rejected-raw");
+    let out = scratch_dir("rejected-out");
+    let first = raw_message(1, "[Rd] Topic A", "A na?ve question.");
+    fs::write(raw.join("2026-February.mbox"), &first).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A")]),
+    );
+    // The page with the right subject is another message's.
+    source.serve(
+        "2026-February/000101.html",
+        &article_page("someone-else@example.org", "A na&#239;ve question."),
+    );
+    run(&raw, &out, &mut source);
+    assert_eq!(pages(&saved(&out, "2026-February")), [None]);
+
+    // The raw file grows, so the period is indexed again. The run has one
+    // request to spend: it ends straight after the index, before it could
+    // fetch any page to find the mistake a second time.
+    let grown = first + &raw_message(2, "[Rd] Topic B", "Plain text.");
+    fs::write(raw.join("2026-February.mbox"), grown).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic B")]),
+    );
+    let opts = SourcesOptions {
+        max_requests: 1,
+        ..SourcesOptions::default()
+    };
+    run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+
+    assert_eq!(source.asked_paths(), ["2026-February/date.html"]);
+    let again = saved(&out, "2026-February");
+    // Same subject, same place, and still not its page.
+    assert_eq!(pages(&again), [None, Some("000102")]);
+    assert_eq!(again.rejected["000101"], "someone-else@example.org");
+
+    // With requests to spare the page is not asked for again either.
+    let mut source = FakeFetcher::new();
+    let report = run(&raw, &out, &mut source);
+    assert!(source.asked.is_empty());
+    assert_eq!(report.mismatches, 0);
+}
+
+#[test]
+fn test_a_rejected_page_goes_to_the_message_it_names_once_that_message_arrives() {
+    let raw = scratch_dir("named-raw");
+    let out = scratch_dir("named-out");
+    // The index is ahead of the raw file: it lists the page of message 1,
+    // and the raw file holds only message 2, a reply with the same subject.
+    let reply = raw_message(2, "Re: [Rd] Topic A", "Not na?ve at all.");
+    fs::write(raw.join("2026-February.mbox"), &reply).unwrap();
+    let page_1 = article_page("m1@example.org", "A na&#239;ve question.");
+    let page_2 = article_page("m2@example.org", "Not na&#239;ve at all.");
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A")]),
+    );
+    source.serve("2026-February/000101.html", &page_1);
+    run(&raw, &out, &mut source);
+    let before = saved(&out, "2026-February");
+    assert_eq!(pages(&before), [None]);
+    assert_eq!(before.rejected["000101"], "m1@example.org");
+
+    // The raw file catches up and now starts with message 1.
+    let both = raw_message(1, "[Rd] Topic A", "A na?ve question.") + &reply;
+    fs::write(raw.join("2026-February.mbox"), both).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic A")]),
+    );
+    source.serve("2026-February/000101.html", &page_1);
+    source.serve("2026-February/000102.html", &page_2);
+    let report = run(&raw, &out, &mut source);
+
+    // Page 000101 names message 1, so message 1 may have it.
+    let after = saved(&out, "2026-February");
+    assert_eq!(pages(&after), [Some("000101"), Some("000102")]);
+    assert_eq!(after.fixes.keys().collect::<Vec<_>>(), ["000101", "000102"]);
+    assert_eq!(report.mismatches, 0);
 }

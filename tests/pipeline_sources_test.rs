@@ -18,6 +18,7 @@ fn period(name: &str, articles: &[Option<&str>], fixes: &[(&str, &str)]) -> Peri
             .iter()
             .map(|(number, fix)| (number.to_string(), fix.to_string()))
             .collect::<BTreeMap<_, _>>(),
+        rejected: BTreeMap::new(),
     }
 }
 
@@ -377,4 +378,36 @@ fn test_a_damaged_sources_file_stops_the_parse_and_names_the_file() {
     )
     .unwrap_err();
     assert!(format!("{:#}", err).contains("2026-February.json"));
+}
+
+#[test]
+fn test_a_sources_file_from_before_rejected_pairings_stops_the_parse_and_names_the_file() {
+    let raw = scratch_dir("old-format-raw");
+    fs::write(
+        raw.join("2026-February.mbox"),
+        raw_message(1, "[Rd] Topic A", "Plain text."),
+    )
+    .unwrap();
+    let sources_dir = scratch_dir("old-format-sources");
+    // What v0.9.0 wrote: no `rejected` field. It is not carried over.
+    fs::write(
+        sources_dir.join("2026-February.json"),
+        "{\n  \"period\": \"2026-February\",\n  \"articles\": [\n    \"000101\"\n  ],\n  \"fixes\": {}\n}\n",
+    )
+    .unwrap();
+
+    let output = scratch_dir("old-format-output");
+    let err = run_parse(
+        &raw,
+        &output,
+        "r-devel",
+        false,
+        None,
+        Some((&sources_dir, BASE)),
+    )
+    .unwrap_err();
+
+    let message = format!("{:#}", err);
+    assert!(message.contains("2026-February.json"), "{message}");
+    assert!(message.contains("missing field `rejected`"), "{message}");
 }
