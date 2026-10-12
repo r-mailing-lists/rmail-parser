@@ -1,0 +1,24 @@
+[
+  {
+    "name": "Ben Bolker",
+    "slug": "ben-bolker",
+    "emailHash": "058f22460bce77c55c3340fec40d01e374409ed76ec5a897b62075a27eb9734c",
+    "messageCount": 2,
+    "firstDate": "2026-02-02T01:13:59Z",
+    "lastDate": "2026-02-03T20:45:00Z",
+    "yearlyActivity": {
+      "2026": 2
+    }
+  },
+  {
+    "name": "Martin Maechler",
+    "slug": "martin-maechler",
+    "emailHash": "a92f4a07d4e3cad5fba985e30db2b0fff598d5ddfbadbb2e91ffe91636400c62",
+    "messageCount": 1,
+    "firstDate": "2026-02-02T11:28:38Z",
+    "lastDate": "2026-02-02T11:28:38Z",
+    "yearlyActivity": {
+      "2026": 1
+    }
+  }
+]

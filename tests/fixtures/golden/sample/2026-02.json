@@ -1,0 +1,82 @@
+{
+  "list": "sample",
+  "description": "",
+  "month": "2026-02",
+  "messages": [
+    {
+      "id": "msg-9cba85e97450",
+      "message_id": "<msg001@example.com>",
+      "from_name": "Ben Bolker",
+      "from_email_hash": "058f22460bce77c55c3340fec40d01e374409ed76ec5a897b62075a27eb9734c",
+      "date": "2026-02-02T01:13:59Z",
+      "subject": "[R] weighted.residuals()",
+      "subject_clean": "weighted.residuals()",
+      "in_reply_to": null,
+      "references": [],
+      "body_plain": "I noticed that weighted.residuals() doesn't handle\nthe case where weights are all zero.\n\nMinimal example:\n  lm(y ~ x, weights = rep(0, 10))",
+      "body_snippet": "I noticed that weighted.residuals() doesn't handle\nthe case where weights are all zero.\n\nMinimal example:\n  lm(y ~ x, weights = rep(0, 10))",
+      "thread_id": "thread-9cba85e97450",
+      "thread_depth": 0,
+      "month": "2026-02"
+    },
+    {
+      "id": "msg-d58041855ca1",
+      "message_id": "<msg002@example.com>",
+      "from_name": "Martin Maechler",
+      "from_email_hash": "a92f4a07d4e3cad5fba985e30db2b0fff598d5ddfbadbb2e91ffe91636400c62",
+      "date": "2026-02-02T11:28:38Z",
+      "subject": "Re: [R] weighted.residuals()",
+      "subject_clean": "weighted.residuals()",
+      "in_reply_to": "<msg001@example.com>",
+      "references": [
+        "<msg001@example.com>"
+      ],
+      "body_plain": "Good catch. The function should error with a more\ninformative message in that case.",
+      "body_snippet": "Good catch. The function should error with a more\ninformative message in that case.",
+      "thread_id": "thread-9cba85e97450",
+      "thread_depth": 1,
+      "month": "2026-02"
+    },
+    {
+      "id": "msg-a79916936c8c",
+      "message_id": "<msg003@example.com>",
+      "from_name": "Ben Bolker",
+      "from_email_hash": "058f22460bce77c55c3340fec40d01e374409ed76ec5a897b62075a27eb9734c",
+      "date": "2026-02-03T20:45:00Z",
+      "subject": "[R] New topic about ggplot2",
+      "subject_clean": "New topic about ggplot2",
+      "in_reply_to": null,
+      "references": [],
+      "body_plain": "Separate thread about ggplot2 facets.",
+      "body_snippet": "Separate thread about ggplot2 facets.",
+      "thread_id": "thread-a79916936c8c",
+      "thread_depth": 0,
+      "month": "2026-02"
+    }
+  ],
+  "threads": [
+    {
+      "id": "thread-9cba85e97450",
+      "subject": "weighted.residuals()",
+      "message_count": 2,
+      "participants": [
+        "Ben Bolker",
+        "Martin Maechler"
+      ],
+      "started": "2026-02-02T01:13:59Z",
+      "last_reply": "2026-02-02T11:28:38Z",
+      "root_message_id": "msg-9cba85e97450"
+    },
+    {
+      "id": "thread-a79916936c8c",
+      "subject": "New topic about ggplot2",
+      "message_count": 1,
+      "participants": [
+        "Ben Bolker"
+      ],
+      "started": "2026-02-03T20:45:00Z",
+      "last_reply": "2026-02-03T20:45:00Z",
+      "root_message_id": "msg-a79916936c8c"
+    }
+  ]
+}

@@ -46,6 +46,8 @@ pub struct Message {
     pub thread_id: String,             // empty - filled later by threading
     pub thread_depth: u32,             // 0 - filled later by threading
     pub month: String,                 // "YYYY-MM" from date
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,    // the message's own page at the source, when known
 }
 
 /// Reverses Mailman's pipermail email obfuscation.
@@ -233,8 +235,7 @@ pub fn parse_message(raw: &str) -> Result<Message> {
         .trim()
         .to_string();
 
-    // Generate snippet (first 200 characters, UTF-8 safe)
-    let body_snippet: String = body_plain.chars().take(200).collect();
+    let body_snippet = make_snippet(&body_plain);
 
     // Extract month
     let month = date.format("%Y-%m").to_string();
@@ -254,7 +255,13 @@ pub fn parse_message(raw: &str) -> Result<Message> {
         thread_id: String::new(),
         thread_depth: 0,
         month,
+        source_url: None,
     })
+}
+
+/// The first 200 characters of a body, cut on a character boundary.
+pub fn make_snippet(body: &str) -> String {
+    body.chars().take(200).collect()
 }
 
 /// Generates a message ID by hashing the RFC 2822 Message-ID with SHA-256

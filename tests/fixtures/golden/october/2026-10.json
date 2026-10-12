@@ -1,0 +1,109 @@
+{
+  "list": "r-devel",
+  "description": "",
+  "month": "2026-10",
+  "messages": [
+    {
+      "id": "msg-80804ada7e27",
+      "message_id": "<msg-084714@example.org>",
+      "from_name": "Ada Example",
+      "from_email_hash": "b699590547e18cf56f7b3ede2ea16cf832e070c567ddf0c06f50814f5ce5cc30",
+      "date": "2026-10-02T21:03:32Z",
+      "subject": "[Rd] Treat multiline expressions as a single block in R Console history #1666",
+      "subject_clean": "Treat multiline expressions as a single block in R Console history #1666",
+      "in_reply_to": null,
+      "references": [],
+      "body_plain": "Dear all,\n\nWhen pasting a multiline expression into the console, it is one block\nin the history on Linux, but not on Windows. Is this intended?",
+      "body_snippet": "Dear all,\n\nWhen pasting a multiline expression into the console, it is one block\nin the history on Linux, but not on Windows. Is this intended?",
+      "thread_id": "thread-80804ada7e27",
+      "thread_depth": 0,
+      "month": "2026-10"
+    },
+    {
+      "id": "msg-072ca51097b0",
+      "message_id": "<msg-084715@example.org>",
+      "from_name": "Ben Example",
+      "from_email_hash": "cb94af1454f1ca65b4e793f3882f9973e2abde8db3e722609e42e73e306aa89e",
+      "date": "2026-10-02T23:03:46Z",
+      "subject": "[Rd] Feature request: allow denominator n in var() and sd()",
+      "subject_clean": "Feature request: allow denominator n in var() and sd()",
+      "in_reply_to": null,
+      "references": [],
+      "body_plain": "Dear R-devel,\n\nThe current var() applies Bessel?s correction. There is a precedent in\ncov.wt(..., method = \"ML\").\nI found a related discussion: https://stat.ethz.ch/pipermail/r-devel/2019-February/077300.html\nThe argument name could follow R Core?s preferences.",
+      "body_snippet": "Dear R-devel,\n\nThe current var() applies Bessel?s correction. There is a precedent in\ncov.wt(..., method = \"ML\").\nI found a related discussion: https://stat.ethz.ch/pipermail/r-devel/2019-February/077",
+      "thread_id": "thread-072ca51097b0",
+      "thread_depth": 0,
+      "month": "2026-10"
+    },
+    {
+      "id": "msg-0f59fc6551a8",
+      "message_id": "<msg-084717@example.org>",
+      "from_name": "Dan Example",
+      "from_email_hash": "f5f148d0e65edb053311770b9f09766cc9e9dcf8b34476a9356328a48e6656e4",
+      "date": "2026-10-03T09:56:13Z",
+      "subject": "[Rd] [PATCH] Include Linux distribution identifiers in the default HTTP User-Agent",
+      "subject_clean": "[PATCH] Include Linux distribution identifiers in the default HTTP User-Agent",
+      "in_reply_to": null,
+      "references": [],
+      "body_plain": "Thanks for the reply, and no worries about the delay.",
+      "body_snippet": "Thanks for the reply, and no worries about the delay.",
+      "thread_id": "thread-0f59fc6551a8",
+      "thread_depth": 0,
+      "month": "2026-10"
+    },
+    {
+      "id": "msg-0d20956eb607",
+      "message_id": "<msg-084716@example.org>",
+      "from_name": "Cat Example",
+      "from_email_hash": "385456e193304f4162c54536fa1e6c3b2ee1d7d698b22931d53cf9f0fa13702c",
+      "date": "2026-10-03T11:38:33Z",
+      "subject": "[Rd] Treat multiline expressions as a single block in R Console history #1666",
+      "subject_clean": "Treat multiline expressions as a single block in R Console history #1666",
+      "in_reply_to": "<msg-084714@example.org>",
+      "references": [
+        "<msg-084714@example.org>"
+      ],
+      "body_plain": "I?aki and I saw this at the Universit?t last week, and it?s the same\nthere. Does that help?\n\nThe notes are at https://example.org/history?id=1666 if you want them.",
+      "body_snippet": "I?aki and I saw this at the Universit?t last week, and it?s the same\nthere. Does that help?\n\nThe notes are at https://example.org/history?id=1666 if you want them.",
+      "thread_id": "thread-80804ada7e27",
+      "thread_depth": 1,
+      "month": "2026-10"
+    }
+  ],
+  "threads": [
+    {
+      "id": "thread-80804ada7e27",
+      "subject": "Treat multiline expressions as a single block in R Console history #1666",
+      "message_count": 2,
+      "participants": [
+        "Ada Example",
+        "Cat Example"
+      ],
+      "started": "2026-10-02T21:03:32Z",
+      "last_reply": "2026-10-03T11:38:33Z",
+      "root_message_id": "msg-80804ada7e27"
+    },
+    {
+      "id": "thread-072ca51097b0",
+      "subject": "Feature request: allow denominator n in var() and sd()",
+      "message_count": 1,
+      "participants": [
+        "Ben Example"
+      ],
+      "started": "2026-10-02T23:03:46Z",
+      "last_reply": "2026-10-02T23:03:46Z",
+      "root_message_id": "msg-072ca51097b0"
+    },
+    {
+      "id": "thread-0f59fc6551a8",
+      "subject": "[PATCH] Include Linux distribution identifiers in the default HTTP User-Agent",
+      "message_count": 1,
+      "participants": [
+        "Dan Example"
+      ],
+      "started": "2026-10-03T09:56:13Z",
+      "last_reply": "2026-10-03T09:56:13Z",
+      "root_message_id": "msg-0f59fc6551a8"
+    }
+  ]
+}

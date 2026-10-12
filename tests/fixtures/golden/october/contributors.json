@@ -1,0 +1,46 @@
+[
+  {
+    "name": "Cat Example",
+    "slug": "cat-example",
+    "emailHash": "385456e193304f4162c54536fa1e6c3b2ee1d7d698b22931d53cf9f0fa13702c",
+    "messageCount": 1,
+    "firstDate": "2026-10-03T11:38:33Z",
+    "lastDate": "2026-10-03T11:38:33Z",
+    "yearlyActivity": {
+      "2026": 1
+    }
+  },
+  {
+    "name": "Ada Example",
+    "slug": "ada-example",
+    "emailHash": "b699590547e18cf56f7b3ede2ea16cf832e070c567ddf0c06f50814f5ce5cc30",
+    "messageCount": 1,
+    "firstDate": "2026-10-02T21:03:32Z",
+    "lastDate": "2026-10-02T21:03:32Z",
+    "yearlyActivity": {
+      "2026": 1
+    }
+  },
+  {
+    "name": "Ben Example",
+    "slug": "ben-example",
+    "emailHash": "cb94af1454f1ca65b4e793f3882f9973e2abde8db3e722609e42e73e306aa89e",
+    "messageCount": 1,
+    "firstDate": "2026-10-02T23:03:46Z",
+    "lastDate": "2026-10-02T23:03:46Z",
+    "yearlyActivity": {
+      "2026": 1
+    }
+  },
+  {
+    "name": "Dan Example",
+    "slug": "dan-example",
+    "emailHash": "f5f148d0e65edb053311770b9f09766cc9e9dcf8b34476a9356328a48e6656e4",
+    "messageCount": 1,
+    "firstDate": "2026-10-03T09:56:13Z",
+    "lastDate": "2026-10-03T09:56:13Z",
+    "yearlyActivity": {
+      "2026": 1
+    }
+  }
+]

@@ -1,6 +1,6 @@
 [package]
 name = "rmail-parser"
-version = "0.1.0"
+version = "0.9.0"
 edition = "2021"
 description = "Parse Mailman pipermail mbox archives into structured JSON"
 
@@ -17,3 +17,4 @@ regex = "1"
 anyhow = "1"
 hex = "0.4"
 encoding_rs = "0.8"
+ureq = "2"

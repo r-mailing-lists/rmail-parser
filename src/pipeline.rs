@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -8,10 +9,11 @@ use rayon::prelude::*;
 use serde::Deserialize;
 
 use crate::mbox::split_mbox;
-use crate::message::{parse_message, Message};
+use crate::message::{make_snippet, parse_message, Message};
 use crate::output::{
     AggregatedContributor, ContributorEntry, ListCount, ListIndex, ListMeta, MonthArchive,
 };
+use crate::sources::{self, PeriodSources};
 use crate::threading::reconstruct_threads;
 
 // ---------------------------------------------------------------------------
@@ -21,7 +23,7 @@ use crate::threading::reconstruct_threads;
 /// Reads a file as a UTF-8 string, falling back to Windows-1252 (Latin-1 superset)
 /// if the file is not valid UTF-8. This handles old mbox files that contain
 /// raw 8-bit characters from various European encodings.
-fn read_file_lossy(path: &Path) -> Result<String> {
+pub fn read_file_lossy(path: &Path) -> Result<String> {
     let bytes =
         fs::read(path).with_context(|| format!("Failed to read {}", path.display()))?;
 
@@ -470,12 +472,17 @@ impl StatsAccumulator {
 /// - One JSON file per month: `{output}/{month}.json`
 /// - If `generate_stats` is true, also writes meta.json, index.json,
 ///   message-order.json, and contributors.json to the output directory.
+/// - If `source_pages` is given as a `sources/` directory and the list's base
+///   URL at the source, each message with a known page gets its `source_url`
+///   and the characters that page restores. Without it, or for a raw file
+///   with no `sources/` file, the output is what it always was.
 pub fn run_parse(
     input: &Path,
     output: &Path,
     list_name: &str,
     generate_stats: bool,
     aliases_path: Option<&Path>,
+    source_pages: Option<(&Path, &str)>,
 ) -> Result<()> {
     let files = discover_mbox_files(input)?;
 
@@ -503,10 +510,19 @@ pub fn run_parse(
 
         let raw_messages = split_mbox(&content);
 
-        // Parse messages in parallel using rayon, skip failures
-        let messages: Vec<Message> = raw_messages
+        let period_sources = match source_pages {
+            Some((dir, _)) => {
+                load_period_sources(dir, &sources::period_of(file_path), raw_messages.len())?
+            }
+            None => None,
+        };
+
+        // Parse messages in parallel using rayon. A message that fails keeps
+        // its slot as `None`: sources/ counts messages by their position in
+        // the raw file, so dropping one here would shift every later link.
+        let parsed: Vec<Option<Message>> = raw_messages
             .par_iter()
-            .filter_map(|raw| match parse_message(raw) {
+            .map(|raw| match parse_message(raw) {
                 Ok(msg) => Some(msg),
                 Err(e) => {
                     eprintln!(
@@ -519,6 +535,16 @@ pub fn run_parse(
             })
             .collect();
 
+        let mut messages: Vec<Message> = Vec::with_capacity(parsed.len());
+        for (position, slot) in parsed.into_iter().enumerate() {
+            if let Some(mut msg) = slot {
+                if let (Some(period), Some((_, base_url))) = (&period_sources, source_pages) {
+                    apply_source(&mut msg, period, position, base_url);
+                }
+                messages.push(msg);
+            }
+        }
+
         if messages.is_empty() {
             eprintln!(
                 "Warning: no valid messages in {}, skipping",
@@ -527,13 +553,23 @@ pub fn run_parse(
             continue;
         }
 
-        // Add messages to the accumulator, deduplicating by id
+        // Add messages to the accumulator, deduplicating by id. The first
+        // copy of a message wins, unless only a later copy found its page.
         for msg in messages {
-            all_by_month
+            match all_by_month
                 .entry(msg.month.clone())
                 .or_default()
                 .entry(msg.id.clone())
-                .or_insert(msg);
+            {
+                Entry::Vacant(slot) => {
+                    slot.insert(msg);
+                }
+                Entry::Occupied(mut slot) => {
+                    if slot.get().source_url.is_none() && msg.source_url.is_some() {
+                        slot.insert(msg);
+                    }
+                }
+            }
         }
     }
 
@@ -581,6 +617,61 @@ pub fn run_parse(
     }
 
     Ok(())
+}
+
+/// Loads the `sources/` file for one raw file. `None` when there is none, or
+/// when it lists more messages than the raw file holds: it then describes a
+/// different file, and its positions cannot be trusted.
+fn load_period_sources(
+    dir: &Path,
+    period: &str,
+    raw_count: usize,
+) -> Result<Option<PeriodSources>> {
+    let period_sources = match sources::load(dir, period)? {
+        Some(period_sources) => period_sources,
+        None => return Ok(None),
+    };
+    if period_sources.articles.len() > raw_count {
+        eprintln!(
+            "Warning: {}.json lists {} messages but the raw file has {}, ignoring it",
+            dir.join(period).display(),
+            period_sources.articles.len(),
+            raw_count
+        );
+        return Ok(None);
+    }
+    Ok(Some(period_sources))
+}
+
+/// Gives the message at `position` in its raw file the link to its own page
+/// and the characters that page restores.
+fn apply_source(msg: &mut Message, period: &PeriodSources, position: usize, base_url: &str) {
+    let number = match period.articles.get(position) {
+        Some(Some(number)) => number,
+        _ => return,
+    };
+    msg.source_url = Some(format!(
+        "{}/{}/{}.html",
+        base_url.trim_end_matches('/'),
+        period.period,
+        number
+    ));
+
+    // An empty fix means the page was fetched and had nothing to restore.
+    let fix = match period.fixes.get(number) {
+        Some(fix) if !fix.is_empty() => fix,
+        _ => return,
+    };
+    match sources::apply_fixes(&msg.body_plain, fix) {
+        Some(body) => {
+            msg.body_snippet = make_snippet(&body);
+            msg.body_plain = body;
+        }
+        None => eprintln!(
+            "Warning: the fix for {}/{}.html no longer fits its message, leaving the body as it is",
+            period.period, number
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------
