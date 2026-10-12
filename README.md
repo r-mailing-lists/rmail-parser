@@ -26,6 +26,8 @@ Or build it from a checkout with `cargo build --release`.
 
 `rmail-parser <command> --help` lists every flag.
 
+`rmail-parser --version` prints the version.
+
 ## Source pages
 
 The text file pipermail offers for each period has no per-message identifiers, and it replaces most non-ASCII characters with `?` ("Bessel?s correction", "Universit?t"). The source also publishes one HTML page per message, and those pages have both. Two steps bring them into the output.

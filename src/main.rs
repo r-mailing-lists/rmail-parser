@@ -9,6 +9,7 @@ use rmail_parser::source_fetch::{self, HttpFetcher, SourcesOptions, SourcesRepor
 
 #[derive(Parser)]
 #[command(name = "rmail-parser")]
+#[command(version)]
 #[command(about = "Parse Mailman pipermail mbox archives into structured JSON")]
 struct Cli {
     #[command(subcommand)]

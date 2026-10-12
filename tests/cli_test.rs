@@ -9,6 +9,16 @@ fn rmail_parser(args: &[&str]) -> Output {
 }
 
 #[test]
+fn test_version_flag_prints_the_crate_version() {
+    let run = rmail_parser(&["--version"]);
+    assert!(run.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&run.stdout).trim(),
+        format!("rmail-parser {}", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
 fn test_parse_refuses_sources_without_base_url() {
     let run = rmail_parser(&[
         "parse",
