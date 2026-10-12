@@ -1,5 +1,16 @@
 /// Split a raw mbox string into individual message strings.
 /// Messages are separated by lines starting with "From " (the mbox format separator).
+///
+/// FROZEN. Every `sources/<period>.json` file gives a message its page by
+/// the message's position in this function's result. Any line that begins
+/// with "From " starts a new message here, including a line of body text
+/// that the source did not escape as ">From ", and text before the first
+/// such line is not a message. That is not always what the sender meant,
+/// but it is what the period files count by. Changing it would move every
+/// position after the affected message, in files already committed to the
+/// archive repositories, and `parse` would then hand messages their
+/// neighbours' pages. A change here needs every period file indexed again.
+/// `tests/mbox_test.rs` pins the rule.
 pub fn split_mbox(content: &str) -> Vec<&str> {
     let mut messages = Vec::new();
     let mut positions: Vec<usize> = Vec::new();

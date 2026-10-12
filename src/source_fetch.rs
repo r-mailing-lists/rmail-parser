@@ -93,6 +93,9 @@ pub struct SourcesOptions {
     pub max_requests: usize,
     /// Failures in a row that end the run. A "not found" answer is one.
     pub max_failures: usize,
+    /// Periods the run may look at, newest first. `None` is every period.
+    /// A scheduled run passes 2, so it never walks into history.
+    pub max_periods: Option<usize>,
 }
 
 impl Default for SourcesOptions {
@@ -100,6 +103,7 @@ impl Default for SourcesOptions {
         Self {
             max_requests: 300,
             max_failures: 3,
+            max_periods: None,
         }
     }
 }
@@ -126,6 +130,19 @@ pub struct SourcesReport {
     /// Requests that failed, or returned something that was not the page
     /// asked for.
     pub failed: usize,
+    /// Periods indexed in this run whose index listed more pages than the
+    /// raw file has messages: the index is live, the raw file a download.
+    pub index_ahead: usize,
+    /// Positions in the period files on disk after the run, for the periods
+    /// the run looked at. A period whose index did not arrive counts with
+    /// the file it already had; a period with no file counts for nothing.
+    pub messages: usize,
+    /// Of those positions, the ones with no page.
+    pub unlinked: usize,
+    /// Rejected pairings in those same files, from this run or earlier.
+    pub rejected: usize,
+    /// Older periods left alone because of `max_periods`.
+    pub periods_skipped: usize,
     /// Why the run ended before every period was up to date, if it did.
     pub stopped: Option<String>,
 }
@@ -203,7 +220,9 @@ impl Budget<'_> {
 /// index of every period that has none or has grown, and the page of every
 /// message that may have a character to restore. Periods are taken newest
 /// first, and each period's file is written as soon as there is something to
-/// write, so the next run picks up where this one stopped.
+/// write, so the next run picks up where this one stopped. With
+/// `max_periods` set, the run looks at that many periods and leaves the
+/// older ones exactly as they are.
 ///
 /// Only a page that arrived is ever written down. A request that fails, or
 /// that the source answers with "not found", changes no file: the period or
@@ -240,11 +259,25 @@ pub fn run_sources(
         failed: 0,
     };
 
-    for file_path in &files {
+    let mut looked_at = 0;
+    for (at, file_path) in files.iter().enumerate() {
+        // The older periods are not even read: a scheduled run stays with
+        // the periods the workflow has just downloaded again.
+        if opts.max_periods.is_some_and(|max| looked_at >= max) {
+            report.periods_skipped = files.len() - at;
+            break;
+        }
         // Read exactly as `parse` does, so both count the same messages.
         let content = read_file_lossy(file_path)?;
         let raw_messages = split_mbox(&content);
         if raw_messages.is_empty() {
+            continue;
+        }
+        looked_at += 1;
+        // After a stop the walk goes on only to count the older periods
+        // that a limited run leaves alone: no period file is read and no
+        // request is sent.
+        if report.stopped.is_some() {
             continue;
         }
         let period = period_of(file_path);
@@ -258,7 +291,9 @@ pub fn run_sources(
         )?;
         if stop.is_some() {
             report.stopped = stop;
-            break;
+            if opts.max_periods.is_none() {
+                break;
+            }
         }
     }
     report.not_found = budget.not_found;
@@ -276,6 +311,12 @@ fn update_period(
     budget: &mut Budget<'_>,
     report: &mut SourcesReport,
 ) -> Result<Option<String>> {
+    // A message that does not parse keeps its place, as it does in `parse`.
+    let parsed: Vec<Option<Message>> = raw_messages
+        .par_iter()
+        .map(|raw| parse_message(raw).ok())
+        .collect();
+
     let mut current = match sources::load(out_dir, period)? {
         Some(known) if known.articles.len() == raw_messages.len() => known,
         // No file yet, or the raw file has changed length since: index it.
@@ -286,37 +327,65 @@ fn update_period(
                 // No index, so nothing is known about this period: its file
                 // is left as it is, or left unwritten, and the index is
                 // asked for again on a later run.
-                Asked::Failed => return Ok(None),
-                Asked::Stop(reason) => return Ok(Some(reason)),
+                Asked::Failed => {
+                    tally(report, stale.as_ref());
+                    return Ok(None);
+                }
+                Asked::Stop(reason) => {
+                    tally(report, stale.as_ref());
+                    return Ok(Some(reason));
+                }
             };
             report.periods_indexed += 1;
+            if index.len() != raw_messages.len() {
+                eprintln!(
+                    "Note: {}: the index lists {} pages and the raw file has {} messages",
+                    period,
+                    index.len(),
+                    raw_messages.len()
+                );
+            }
+            if index.len() > raw_messages.len() {
+                report.index_ahead += 1;
+            }
             let keys: Vec<String> = raw_messages
                 .iter()
                 .map(|raw| subject_key(&raw_subject(raw)))
                 .collect();
-            let articles = align(&keys, &index);
+            let mut articles = align(&keys, &index);
             // A page already fetched stays fetched for as long as the index
             // lists it, whether or not a message is linked to it just now:
             // the index can be ahead of the raw file, and the messages it
             // unlinks are linked again once the raw file has caught up.
             let listed: HashSet<&str> = index.iter().map(|e| e.number.as_str()).collect();
-            let mut fixes = stale.map(|s| s.fixes).unwrap_or_default();
+            let (mut fixes, mut rejected) = match stale {
+                Some(stale) => (stale.fixes, stale.rejected),
+                None => Default::default(),
+            };
             fixes.retain(|number, _| listed.contains(number.as_str()));
+            rejected.retain(|number, _| listed.contains(number.as_str()));
+            // A page that has said whose it is goes to that message only.
+            // Pairing by subject would otherwise hand it back to the message
+            // it was taken from, and nothing would look at it again.
+            for (i, article) in articles.iter_mut().enumerate() {
+                let named = article.as_ref().and_then(|number| rejected.get(number));
+                if let Some(named) = named {
+                    let own = parsed[i].as_ref().map(own_message_id);
+                    if own != Some(named.as_str()) {
+                        *article = None;
+                    }
+                }
+            }
             let indexed = PeriodSources {
                 period: period.to_string(),
                 articles,
                 fixes,
+                rejected,
             };
             save_period(out_dir, &indexed)?;
             indexed
         }
     };
-
-    // A message that does not parse keeps its place, as it does in `parse`.
-    let parsed: Vec<Option<Message>> = raw_messages
-        .par_iter()
-        .map(|raw| parse_message(raw).ok())
-        .collect();
 
     let mut unsaved = 0;
     let mut stop = None;
@@ -333,7 +402,7 @@ fn update_period(
         match budget.ask(&url, parse_article) {
             Asked::Got(page) => {
                 report.pages_fetched += 1;
-                if names_another_message(&page, msg) {
+                if let Some(named) = other_message_named(&page, msg) {
                     eprintln!(
                         "Warning: {}/{}.html is not the page of message {} in the raw file, unlinking it",
                         period,
@@ -341,6 +410,9 @@ fn update_period(
                         i + 1
                     );
                     current.articles[i] = None;
+                    // Written down, so that indexing the period again does
+                    // not pair the two a second time.
+                    current.rejected.insert(number, named);
                     report.mismatches += 1;
                 } else {
                     let fix = fix_string(&msg.body_plain, &page.text);
@@ -370,7 +442,18 @@ fn update_period(
     if unsaved > 0 {
         save_period(out_dir, &current)?;
     }
+    // What the period's file says now, whether or not this run changed it.
+    tally(report, Some(&current));
     Ok(stop)
+}
+
+/// Adds what a period's file on disk says to the report's totals.
+fn tally(report: &mut SourcesReport, on_file: Option<&PeriodSources>) {
+    if let Some(file) = on_file {
+        report.messages += file.articles.len();
+        report.unlinked += file.articles.iter().filter(|a| a.is_none()).count();
+        report.rejected += file.rejected.len();
+    }
 }
 
 fn save_period(out_dir: &Path, period: &PeriodSources) -> Result<()> {
@@ -407,15 +490,20 @@ fn raw_subject(raw: &str) -> String {
         .unwrap_or_default()
 }
 
-/// True when the page names a Message-ID and it is not this message's.
-fn names_another_message(page: &ArticlePage, msg: &Message) -> bool {
-    let own = msg
-        .message_id
+/// A message's own Message-ID, without angle brackets, as a page names it.
+fn own_message_id(msg: &Message) -> &str {
+    msg.message_id
         .trim()
         .trim_start_matches('<')
-        .trim_end_matches('>');
+        .trim_end_matches('>')
+}
+
+/// The Message-ID the page names, when it names one and it is not this
+/// message's. `None` when the page is this message's, or cannot say.
+fn other_message_named(page: &ArticlePage, msg: &Message) -> Option<String> {
+    let own = own_message_id(msg);
     match &page.message_id {
-        Some(id) => !own.is_empty() && id != own,
-        None => false,
+        Some(id) if !own.is_empty() && id != own => Some(id.clone()),
+        _ => None,
     }
 }

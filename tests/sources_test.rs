@@ -22,6 +22,10 @@ fn sample() -> PeriodSources {
     // Inserted out of order: the file must still list them sorted.
     fixes.insert("084716".to_string(), "?\u{2019}?\u{e4}".to_string());
     fixes.insert("084715".to_string(), String::new());
+    // The third message was paired with page 084717, and that page named
+    // another message.
+    let mut rejected = BTreeMap::new();
+    rejected.insert("084717".to_string(), "msg-084799@example.org".to_string());
     PeriodSources {
         period: "2026-October".to_string(),
         articles: vec![
@@ -31,6 +35,7 @@ fn sample() -> PeriodSources {
             Some("084716".to_string()),
         ],
         fixes,
+        rejected,
     }
 }
 
@@ -76,8 +81,42 @@ fn test_save_writes_a_fixed_layout() {
     let dir = scratch_dir("layout");
     save(&dir, &sample()).unwrap();
     let written = fs::read_to_string(dir.join("2026-October.json")).unwrap();
-    let expected = "{\n  \"period\": \"2026-October\",\n  \"articles\": [\n    \"084714\",\n    \"084715\",\n    null,\n    \"084716\"\n  ],\n  \"fixes\": {\n    \"084715\": \"\",\n    \"084716\": \"?\u{2019}?\u{e4}\"\n  }\n}\n";
+    let expected = "{\n  \"period\": \"2026-October\",\n  \"articles\": [\n    \"084714\",\n    \"084715\",\n    null,\n    \"084716\"\n  ],\n  \"fixes\": {\n    \"084715\": \"\",\n    \"084716\": \"?\u{2019}?\u{e4}\"\n  },\n  \"rejected\": {\n    \"084717\": \"msg-084799@example.org\"\n  }\n}\n";
     assert_eq!(written, expected);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_save_writes_rejected_even_when_nothing_was_rejected() {
+    let dir = scratch_dir("nothing-rejected");
+    let mut nothing = sample();
+    nothing.rejected.clear();
+    save(&dir, &nothing).unwrap();
+    let written = fs::read_to_string(dir.join("2026-October.json")).unwrap();
+    assert!(
+        written.ends_with("  },\n  \"rejected\": {}\n}\n"),
+        "{written}"
+    );
+    assert_eq!(load(&dir, "2026-October").unwrap().unwrap(), nothing);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_load_refuses_a_file_written_before_rejected_pairings_were_recorded() {
+    let dir = scratch_dir("old-format");
+    // What v0.9.0 wrote: no `rejected` field.
+    let old = "{\n  \"period\": \"2026-October\",\n  \"articles\": [\n    \"084714\"\n  ],\n  \"fixes\": {}\n}\n";
+    fs::write(dir.join("2026-October.json"), old).unwrap();
+
+    let err = load(&dir, "2026-October").unwrap_err();
+    let message = format!("{:#}", err);
+    assert!(message.contains("2026-October.json"), "{message}");
+    assert!(message.contains("missing field `rejected`"), "{message}");
+    // The file is left as it was, for a person to look at.
+    assert_eq!(
+        fs::read_to_string(dir.join("2026-October.json")).unwrap(),
+        old
+    );
     fs::remove_dir_all(&dir).unwrap();
 }
 
