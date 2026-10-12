@@ -83,6 +83,7 @@ fn main() {
             &list,
             !no_stats,
             aliases.as_deref().map(Path::new),
+            None,
         ),
         Commands::Stats {
             input,
