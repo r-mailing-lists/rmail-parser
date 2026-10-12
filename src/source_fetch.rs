@@ -93,6 +93,9 @@ pub struct SourcesOptions {
     pub max_requests: usize,
     /// Failures in a row that end the run. A "not found" answer is one.
     pub max_failures: usize,
+    /// Periods the run may look at, newest first. `None` is every period.
+    /// A scheduled run passes 2, so it never walks into history.
+    pub max_periods: Option<usize>,
 }
 
 impl Default for SourcesOptions {
@@ -100,6 +103,7 @@ impl Default for SourcesOptions {
         Self {
             max_requests: 300,
             max_failures: 3,
+            max_periods: None,
         }
     }
 }
@@ -126,6 +130,8 @@ pub struct SourcesReport {
     /// Requests that failed, or returned something that was not the page
     /// asked for.
     pub failed: usize,
+    /// Older periods left alone because of `max_periods`.
+    pub periods_skipped: usize,
     /// Why the run ended before every period was up to date, if it did.
     pub stopped: Option<String>,
 }
@@ -203,7 +209,9 @@ impl Budget<'_> {
 /// index of every period that has none or has grown, and the page of every
 /// message that may have a character to restore. Periods are taken newest
 /// first, and each period's file is written as soon as there is something to
-/// write, so the next run picks up where this one stopped.
+/// write, so the next run picks up where this one stopped. With
+/// `max_periods` set, the run looks at that many periods and leaves the
+/// older ones exactly as they are.
 ///
 /// Only a page that arrived is ever written down. A request that fails, or
 /// that the source answers with "not found", changes no file: the period or
@@ -240,13 +248,21 @@ pub fn run_sources(
         failed: 0,
     };
 
-    for file_path in &files {
+    let mut looked_at = 0;
+    for (at, file_path) in files.iter().enumerate() {
+        // The older periods are not even read: a scheduled run stays with
+        // the periods the workflow has just downloaded again.
+        if opts.max_periods.is_some_and(|max| looked_at >= max) {
+            report.periods_skipped = files.len() - at;
+            break;
+        }
         // Read exactly as `parse` does, so both count the same messages.
         let content = read_file_lossy(file_path)?;
         let raw_messages = split_mbox(&content);
         if raw_messages.is_empty() {
             continue;
         }
+        looked_at += 1;
         let period = period_of(file_path);
         let stop = update_period(
             &period,

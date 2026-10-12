@@ -73,6 +73,7 @@ fn test_sources_defaults_to_300_requests_a_second_apart() {
         "--base-url",
         "--max-requests",
         "--delay-ms",
+        "--max-periods",
     ] {
         assert!(help.contains(expected), "{expected} missing from:\n{help}");
     }
@@ -192,4 +193,61 @@ fn test_sources_that_could_not_fetch_everything_does_not_say_up_to_date() {
     assert!(!stderr.contains("Every period is up to date"), "{stderr}");
     assert!(!stderr.contains("Stopped early"), "{stderr}");
     assert!(!out.exists());
+}
+
+#[test]
+fn test_sources_with_max_periods_does_not_claim_every_period_is_up_to_date() {
+    let raw = std::env::temp_dir().join(format!(
+        "rmail-parser-cli-{}-periods-raw",
+        std::process::id()
+    ));
+    let out = std::env::temp_dir().join(format!(
+        "rmail-parser-cli-{}-periods-out",
+        std::process::id()
+    ));
+    for dir in [&raw, &out] {
+        let _ = std::fs::remove_dir_all(dir);
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    std::fs::copy(
+        fixtures.join("raw/2026-October.mbox"),
+        raw.join("2026-October.mbox"),
+    )
+    .unwrap();
+    // An older period that has never been indexed.
+    std::fs::copy(fixtures.join("sample.mbox"), raw.join("2026-February.mbox")).unwrap();
+    let complete = "{\n  \"period\": \"2026-October\",\n  \"articles\": [\n    \"084714\",\n    \"084715\",\n    \"084716\",\n    \"084717\"\n  ],\n  \"fixes\": {\n    \"084715\": \"\",\n    \"084716\": \"\"\n  },\n  \"rejected\": {}\n}\n";
+    std::fs::write(out.join("2026-October.json"), complete).unwrap();
+
+    // A budget of zero: were February looked at, the run would stop early.
+    let run = rmail_parser(&[
+        "sources",
+        "--raw",
+        raw.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+        "--base-url",
+        "https://lists.example.org/pipermail/r-devel/",
+        "--max-requests",
+        "0",
+        "--max-periods",
+        "1",
+    ]);
+
+    assert!(run.status.success());
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(
+        stderr.contains("Older periods not looked at:   1\n"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("The periods looked at are up to date"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("Every period is up to date"), "{stderr}");
+    assert!(!stderr.contains("Stopped early"), "{stderr}");
+    assert!(!out.join("2026-February.json").exists());
+    std::fs::remove_dir_all(&raw).unwrap();
+    std::fs::remove_dir_all(&out).unwrap();
 }

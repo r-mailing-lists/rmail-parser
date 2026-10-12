@@ -72,6 +72,7 @@ fn test_first_run_indexes_the_period_and_fetches_only_the_pages_it_needs() {
             astral_chars: 0,
             not_found: 0,
             failed: 0,
+            periods_skipped: 0,
             stopped: None,
         }
     );
@@ -1240,4 +1241,106 @@ fn test_a_rejected_page_goes_to_the_message_it_names_once_that_message_arrives()
     assert_eq!(pages(&after), [Some("000101"), Some("000102")]);
     assert_eq!(after.fixes.keys().collect::<Vec<_>>(), ["000101", "000102"]);
     assert_eq!(report.mismatches, 0);
+}
+
+/// One message, and its index, for each of `periods`.
+fn one_message_periods(raw: &Path, periods: &[&str]) -> FakeFetcher {
+    let mut source = FakeFetcher::new();
+    for period in periods {
+        fs::write(
+            raw.join(format!("{period}.mbox")),
+            raw_message(1, "[Rd] Topic", "Plain text."),
+        )
+        .unwrap();
+        source.serve(
+            &format!("{period}/date.html"),
+            &index_page(&[("000101", "[Rd] Topic")]),
+        );
+    }
+    source
+}
+
+#[test]
+fn test_max_periods_keeps_a_run_out_of_history() {
+    let raw = scratch_dir("max-periods-raw");
+    let out = scratch_dir("max-periods-out");
+    let periods = [
+        "2025-December",
+        "2026-January",
+        "2026-February",
+        "2026-March",
+    ];
+    let mut source = one_message_periods(&raw, &periods);
+
+    // What a scheduled run passes: the two newest periods, and budget to spare.
+    let opts = SourcesOptions {
+        max_periods: Some(2),
+        ..SourcesOptions::default()
+    };
+    let report = run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+
+    assert_eq!(
+        source.asked_paths(),
+        ["2026-March/date.html", "2026-February/date.html"]
+    );
+    assert_eq!(report.periods_indexed, 2);
+    assert_eq!(report.periods_skipped, 2);
+    // Leaving history alone is not stopping early.
+    assert_eq!(report.stopped, None);
+    assert!(!out.join("2026-January.json").exists());
+    assert!(!out.join("2025-December.json").exists());
+
+    // The same run the next day asks for nothing: it does not creep back a
+    // period at a time.
+    let mut source = one_message_periods(&raw, &periods);
+    let report = run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+    assert!(source.asked.is_empty());
+    assert_eq!(report.periods_skipped, 2);
+
+    // A run without the limit, which is what a backfill is, takes the rest.
+    let mut source = one_message_periods(&raw, &periods);
+    let report = run(&raw, &out, &mut source);
+    assert_eq!(
+        source.asked_paths(),
+        ["2026-January/date.html", "2025-December/date.html"]
+    );
+    assert_eq!(report.periods_skipped, 0);
+}
+
+#[test]
+fn test_max_periods_counts_periods_that_have_messages() {
+    let raw = scratch_dir("max-periods-empty-raw");
+    let out = scratch_dir("max-periods-empty-out");
+    let mut source = one_message_periods(&raw, &["2026-January", "2026-February", "2026-March"]);
+    // The newest file has no messages in it yet.
+    fs::write(raw.join("2026-April.mbox"), "").unwrap();
+
+    let opts = SourcesOptions {
+        max_periods: Some(2),
+        ..SourcesOptions::default()
+    };
+    let report = run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+
+    assert_eq!(
+        source.asked_paths(),
+        ["2026-March/date.html", "2026-February/date.html"]
+    );
+    assert_eq!(report.periods_skipped, 1);
+}
+
+#[test]
+fn test_max_periods_of_zero_looks_at_nothing() {
+    let raw = scratch_dir("max-periods-zero-raw");
+    let out = scratch_dir("max-periods-zero-out");
+    let mut source = one_message_periods(&raw, &["2026-February", "2026-March"]);
+
+    let opts = SourcesOptions {
+        max_periods: Some(0),
+        ..SourcesOptions::default()
+    };
+    let report = run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+
+    assert!(source.asked.is_empty());
+    assert_eq!(report.periods_skipped, 2);
+    assert_eq!(fs::read_dir(&out).unwrap().count(), 0);
 }

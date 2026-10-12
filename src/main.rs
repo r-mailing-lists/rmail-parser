@@ -59,6 +59,10 @@ enum Commands {
         /// Pause between requests, in milliseconds
         #[arg(long, default_value_t = 1000)]
         delay_ms: u64,
+
+        /// Look at this many periods only, newest first (default: every period)
+        #[arg(long)]
+        max_periods: Option<usize>,
     },
     /// Generate stats from already-parsed processed JSON (no mbox re-parsing)
     Stats {
@@ -126,9 +130,11 @@ fn main() {
             base_url,
             max_requests,
             delay_ms,
+            max_periods,
         } => {
             let opts = SourcesOptions {
                 max_requests,
+                max_periods,
                 ..SourcesOptions::default()
             };
             let mut fetcher = HttpFetcher::new(delay_ms);
@@ -176,7 +182,8 @@ fn main() {
 /// Prints what a `sources` run did. A run that stopped early says so here
 /// and still succeeds: the next run carries on from the files it wrote. A
 /// run that reached the end but did not get everything it asked for says
-/// that, and not that every period is up to date.
+/// that, and not that every period is up to date. Nor does a run that was
+/// told to leave the older periods alone.
 fn print_sources_report(report: &SourcesReport) {
     eprintln!("Periods indexed:               {}", report.periods_indexed);
     eprintln!("Pages fetched:                 {}", report.pages_fetched);
@@ -186,11 +193,14 @@ fn print_sources_report(report: &SourcesReport) {
     eprintln!("Characters beyond U+FFFF seen: {}", report.astral_chars);
     eprintln!("Requests that failed:          {}", report.failed);
     eprintln!("Pages the source did not have: {}", report.not_found);
+    eprintln!("Older periods not looked at:   {}", report.periods_skipped);
+    let complete = report.failed == 0 && report.not_found == 0;
     match &report.stopped {
         Some(reason) => eprintln!("Stopped early: {}", reason),
-        None if report.failed == 0 && report.not_found == 0 => {
+        None if complete && report.periods_skipped == 0 => {
             eprintln!("Every period is up to date")
         }
+        None if complete => eprintln!("The periods looked at are up to date"),
         None => eprintln!("Not everything was fetched; the next run will ask again"),
     }
 }
