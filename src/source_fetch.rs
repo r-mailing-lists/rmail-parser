@@ -275,7 +275,8 @@ pub fn run_sources(
         }
         looked_at += 1;
         // After a stop the walk goes on only to count the older periods
-        // that a limited run leaves alone: no file is read, no request sent.
+        // that a limited run leaves alone: no period file is read and no
+        // request is sent.
         if report.stopped.is_some() {
             continue;
         }
