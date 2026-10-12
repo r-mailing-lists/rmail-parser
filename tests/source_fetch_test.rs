@@ -1111,3 +1111,36 @@ fn test_a_period_file_that_cannot_be_read_stops_the_run_and_is_left_alone() {
         b"this is not json"
     );
 }
+
+#[test]
+fn test_a_body_line_starting_with_from_takes_a_position_of_its_own() {
+    let raw = scratch_dir("from-line-raw");
+    let out = scratch_dir("from-line-out");
+    // The first message has a body line that begins with "From ", which
+    // `split_mbox` takes for the start of a message. Positions are counted
+    // its way, so the raw file has three of them for two real messages.
+    let mbox = raw_message(
+        1,
+        "[Rd] Topic A",
+        "I heard it yesterday.\nFrom what I can tell, it is the same bug.",
+    ) + &raw_message(2, "[Rd] Topic B", "A na?ve question.");
+    fs::write(raw.join("2026-February.mbox"), mbox).unwrap();
+
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic B")]),
+    );
+    source.serve(
+        "2026-February/000102.html",
+        &article_page("m2@example.org", "A na&#239;ve question."),
+    );
+
+    run(&raw, &out, &mut source);
+
+    // The second real message sits at the third position, and that is where
+    // its page is recorded: `parse` counts the same way and finds it there.
+    let saved = saved(&out, "2026-February");
+    assert_eq!(pages(&saved), [Some("000101"), None, Some("000102")]);
+    assert_eq!(saved.fixes["000102"], "\u{ef}");
+}
