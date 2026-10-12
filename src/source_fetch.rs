@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -280,24 +281,27 @@ fn update_period(
         // No file yet, or the raw file has changed length since: index it.
         stale => {
             let url = format!("{}/{}/date.html", base, period);
-            let articles = match budget.ask(&url, non_empty_index) {
-                Asked::Got(index) => {
-                    let keys: Vec<String> = raw_messages
-                        .iter()
-                        .map(|raw| subject_key(&raw_subject(raw)))
-                        .collect();
-                    report.periods_indexed += 1;
-                    align(&keys, &index)
-                }
+            let index = match budget.ask(&url, non_empty_index) {
+                Asked::Got(index) => index,
                 // No index, so nothing is known about this period: its file
                 // is left as it is, or left unwritten, and the index is
                 // asked for again on a later run.
                 Asked::Failed => return Ok(None),
                 Asked::Stop(reason) => return Ok(Some(reason)),
             };
-            // Pages already fetched stay fetched, as long as they are still here.
+            report.periods_indexed += 1;
+            let keys: Vec<String> = raw_messages
+                .iter()
+                .map(|raw| subject_key(&raw_subject(raw)))
+                .collect();
+            let articles = align(&keys, &index);
+            // A page already fetched stays fetched for as long as the index
+            // lists it, whether or not a message is linked to it just now:
+            // the index can be ahead of the raw file, and the messages it
+            // unlinks are linked again once the raw file has caught up.
+            let listed: HashSet<&str> = index.iter().map(|e| e.number.as_str()).collect();
             let mut fixes = stale.map(|s| s.fixes).unwrap_or_default();
-            fixes.retain(|number, _| articles.iter().flatten().any(|a| a == number));
+            fixes.retain(|number, _| listed.contains(number.as_str()));
             let indexed = PeriodSources {
                 period: period.to_string(),
                 articles,

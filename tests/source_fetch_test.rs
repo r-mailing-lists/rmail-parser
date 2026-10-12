@@ -788,6 +788,131 @@ fn test_a_period_that_has_grown_is_indexed_again_and_keeps_its_fixes() {
     assert_eq!(saved.fixes.len(), 2);
 }
 
+/// An index of `count` pages numbered from 000101, all in one thread.
+fn one_thread_index(count: usize) -> String {
+    let numbers: Vec<String> = (1..=count).map(|n| format!("00010{n}")).collect();
+    let entries: Vec<(&str, &str)> = numbers
+        .iter()
+        .map(|number| (number.as_str(), "[Rd] Topic A"))
+        .collect();
+    index_page(&entries)
+}
+
+#[test]
+fn test_a_fix_is_kept_while_its_message_is_unlinked() {
+    let raw = scratch_dir("ahead-raw");
+    let out = scratch_dir("ahead-out");
+    // Two messages of one thread, both linked and both pages fetched.
+    let two = raw_message(1, "[Rd] Topic A", "A na?ve question.")
+        + &raw_message(2, "Re: [Rd] Topic A", "Not na?ve at all.");
+    fs::write(raw.join("2026-February.mbox"), &two).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve("2026-February/date.html", &one_thread_index(2));
+    source.serve(
+        "2026-February/000101.html",
+        &article_page("m1@example.org", "A na&#239;ve question."),
+    );
+    source.serve(
+        "2026-February/000102.html",
+        &article_page("m2@example.org", "Not na&#239;ve at all."),
+    );
+    run(&raw, &out, &mut source);
+    let linked = saved(&out, "2026-February");
+    assert_eq!(pages(&linked), [Some("000101"), Some("000102")]);
+    assert_eq!(
+        linked.fixes.keys().collect::<Vec<_>>(),
+        ["000101", "000102"]
+    );
+
+    // The thread goes on. The raw file is a download and has one more reply;
+    // the index is live and already has two. Four pages for three messages
+    // with one subject: nothing says which page is whose, so the whole run
+    // is unlinked.
+    let three = two + &raw_message(3, "Re: [Rd] Topic A", "Plain text.");
+    fs::write(raw.join("2026-February.mbox"), &three).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve("2026-February/date.html", &one_thread_index(4));
+    let report = run(&raw, &out, &mut source);
+    assert_eq!(source.asked_paths(), ["2026-February/date.html"]);
+    assert_eq!(report.periods_indexed, 1);
+    let unlinked = saved(&out, "2026-February");
+    assert_eq!(pages(&unlinked), [None, None, None]);
+    // Both pages are still in the index, so what they gave is kept.
+    assert_eq!(unlinked.fixes, linked.fixes);
+
+    // The raw file catches up. Every message is linked again, and neither
+    // of the two pages is asked for a second time.
+    let four = three + &raw_message(4, "Re: [Rd] Topic A", "Still na?ve.");
+    fs::write(raw.join("2026-February.mbox"), four).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve("2026-February/date.html", &one_thread_index(4));
+    source.serve(
+        "2026-February/000104.html",
+        &article_page("m4@example.org", "Still na&#239;ve."),
+    );
+    let report = run(&raw, &out, &mut source);
+    assert_eq!(
+        source.asked_paths(),
+        ["2026-February/date.html", "2026-February/000104.html"]
+    );
+    assert_eq!(report.pages_fetched, 1);
+    let caught_up = saved(&out, "2026-February");
+    assert_eq!(
+        pages(&caught_up),
+        [
+            Some("000101"),
+            Some("000102"),
+            Some("000103"),
+            Some("000104")
+        ]
+    );
+    assert_eq!(
+        caught_up.fixes.keys().collect::<Vec<_>>(),
+        ["000101", "000102", "000104"]
+    );
+    assert_eq!(caught_up.fixes["000101"], linked.fixes["000101"]);
+    assert_eq!(caught_up.fixes["000102"], linked.fixes["000102"]);
+}
+
+#[test]
+fn test_a_fix_for_a_page_the_index_no_longer_lists_is_dropped() {
+    let raw = scratch_dir("delisted-raw");
+    let out = scratch_dir("delisted-out");
+    // On file: one message, linked to page 000099, which has been fetched.
+    sources::save(
+        &out,
+        &PeriodSources {
+            period: "2026-February".to_string(),
+            articles: vec![Some("000099".to_string())],
+            fixes: [("000099".to_string(), "\u{ef}".to_string())].into(),
+        },
+    )
+    .unwrap();
+
+    // The raw file has grown, and the index has no page 000099 any more.
+    let mbox = raw_message(1, "[Rd] Topic A", "A na?ve question.")
+        + &raw_message(2, "[Rd] Topic B", "Plain text.");
+    fs::write(raw.join("2026-February.mbox"), mbox).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic B")]),
+    );
+    source.serve(
+        "2026-February/000101.html",
+        &article_page("m1@example.org", "A na&#239;ve question."),
+    );
+    run(&raw, &out, &mut source);
+
+    assert_eq!(
+        source.asked_paths(),
+        ["2026-February/date.html", "2026-February/000101.html"]
+    );
+    let after = saved(&out, "2026-February");
+    assert_eq!(pages(&after), [Some("000101"), Some("000102")]);
+    assert_eq!(after.fixes.keys().collect::<Vec<_>>(), ["000101"]);
+}
+
 #[test]
 fn test_characters_beyond_the_bmp_are_counted_and_left() {
     let raw = scratch_dir("astral-raw");
