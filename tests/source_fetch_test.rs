@@ -72,6 +72,10 @@ fn test_first_run_indexes_the_period_and_fetches_only_the_pages_it_needs() {
             astral_chars: 0,
             not_found: 0,
             failed: 0,
+            index_ahead: 0,
+            messages: 4,
+            unlinked: 0,
+            rejected: 0,
             periods_skipped: 0,
             stopped: None,
         }
@@ -89,7 +93,14 @@ fn test_second_run_asks_for_nothing_and_changes_nothing() {
     let report = run(&raw, &out, &mut source);
 
     assert!(source.asked.is_empty());
-    assert_eq!(report, SourcesReport::default());
+    // Nothing was done; the period's four messages are still counted.
+    assert_eq!(
+        report,
+        SourcesReport {
+            messages: 4,
+            ..SourcesReport::default()
+        }
+    );
     assert!(before == fs::read(out.join("2026-October.json")).unwrap());
 }
 
@@ -550,6 +561,7 @@ fn test_message_pages_that_are_not_found_stop_the_run_and_stay_linked() {
         SourcesReport {
             periods_indexed: 1,
             not_found: 3,
+            messages: 6,
             stopped: Some("3 requests in a row failed".to_string()),
             ..SourcesReport::default()
         }
@@ -701,6 +713,7 @@ fn test_an_answer_after_a_not_found_starts_the_count_again() {
         SourcesReport {
             periods_indexed: 1,
             not_found: 4,
+            messages: 1,
             ..SourcesReport::default()
         }
     );
@@ -744,6 +757,7 @@ fn test_a_not_found_answer_counts_against_the_request_budget() {
         SourcesReport {
             periods_indexed: 1,
             not_found: 1,
+            messages: 1,
             stopped: Some("request budget of 2 spent".to_string()),
             ..SourcesReport::default()
         }
@@ -1343,4 +1357,94 @@ fn test_max_periods_of_zero_looks_at_nothing() {
     assert!(source.asked.is_empty());
     assert_eq!(report.periods_skipped, 2);
     assert_eq!(fs::read_dir(&out).unwrap().count(), 0);
+}
+
+#[test]
+fn test_the_report_counts_what_is_on_file_for_the_periods_looked_at() {
+    let raw = scratch_dir("counts-raw");
+    let out = scratch_dir("counts-out");
+    // Three messages: one whose page turns out to be another message's, one
+    // that is linked, and one the index has no entry for.
+    let mbox = raw_message(1, "[Rd] Topic A", "A na?ve question.")
+        + &raw_message(2, "[Rd] Topic B", "Plain text.")
+        + &raw_message(3, "[Rd] Topic C", "Plain text.");
+    fs::write(raw.join("2026-February.mbox"), mbox).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic B")]),
+    );
+    source.serve(
+        "2026-February/000101.html",
+        &article_page("someone-else@example.org", "A na&#239;ve question."),
+    );
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(report.messages, 3);
+    assert_eq!(report.unlinked, 2);
+    assert_eq!(report.rejected, 1);
+    assert_eq!(report.mismatches, 1);
+    // Two pages for three messages: the index is behind, not ahead.
+    assert_eq!(report.index_ahead, 0);
+
+    // A run that has nothing to do reports the same state. `mismatches`
+    // counts what a run found, `rejected` what is written down.
+    let mut source = FakeFetcher::new();
+    let report = run(&raw, &out, &mut source);
+    assert!(source.asked.is_empty());
+    assert_eq!(report.messages, 3);
+    assert_eq!(report.unlinked, 2);
+    assert_eq!(report.rejected, 1);
+    assert_eq!(report.mismatches, 0);
+}
+
+#[test]
+fn test_an_index_ahead_of_the_raw_file_is_counted_when_the_period_is_indexed() {
+    let raw = scratch_dir("ahead-count-raw");
+    let out = scratch_dir("ahead-count-out");
+    fs::write(
+        raw.join("2026-February.mbox"),
+        raw_message(1, "[Rd] Topic A", "Plain text."),
+    )
+    .unwrap();
+    // The index is live and already lists a message the raw file, a
+    // download, does not hold yet.
+    let index = index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic B")]);
+    let mut source = FakeFetcher::new();
+    source.serve("2026-February/date.html", &index);
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(report.index_ahead, 1);
+    assert_eq!(report.messages, 1);
+    assert_eq!(report.unlinked, 0);
+    assert_eq!(pages(&saved(&out, "2026-February")), [Some("000101")]);
+
+    // It is counted by the run that fetched the index, and not again by a
+    // run that had no reason to fetch it.
+    let mut source = FakeFetcher::new();
+    source.serve("2026-February/date.html", &index);
+    let report = run(&raw, &out, &mut source);
+    assert!(source.asked.is_empty());
+    assert_eq!(report.index_ahead, 0);
+}
+
+#[test]
+fn test_a_period_whose_index_did_not_arrive_is_not_counted() {
+    let raw = scratch_dir("uncounted-raw");
+    let out = scratch_dir("uncounted-out");
+    fs::write(
+        raw.join("2026-February.mbox"),
+        raw_message(1, "[Rd] Topic A", "Plain text."),
+    )
+    .unwrap();
+
+    // Not found: the period has no file, so nothing is known about it.
+    let mut source = FakeFetcher::new();
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(report.not_found, 1);
+    assert_eq!(report.messages, 0);
+    assert_eq!(report.unlinked, 0);
 }

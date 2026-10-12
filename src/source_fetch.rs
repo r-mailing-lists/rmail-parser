@@ -130,6 +130,15 @@ pub struct SourcesReport {
     /// Requests that failed, or returned something that was not the page
     /// asked for.
     pub failed: usize,
+    /// Periods indexed in this run whose index listed more pages than the
+    /// raw file has messages: the index is live, the raw file a download.
+    pub index_ahead: usize,
+    /// Messages in the periods this run looked at and has a file for.
+    pub messages: usize,
+    /// Of those, the messages that have no page.
+    pub unlinked: usize,
+    /// Rejected pairings on file in those periods, from this run or earlier.
+    pub rejected: usize,
     /// Older periods left alone because of `max_periods`.
     pub periods_skipped: usize,
     /// Why the run ended before every period was up to date, if it did.
@@ -312,6 +321,17 @@ fn update_period(
                 Asked::Stop(reason) => return Ok(Some(reason)),
             };
             report.periods_indexed += 1;
+            if index.len() != raw_messages.len() {
+                eprintln!(
+                    "Note: {}: the index lists {} pages and the raw file has {} messages",
+                    period,
+                    index.len(),
+                    raw_messages.len()
+                );
+            }
+            if index.len() > raw_messages.len() {
+                report.index_ahead += 1;
+            }
             let keys: Vec<String> = raw_messages
                 .iter()
                 .map(|raw| subject_key(&raw_subject(raw)))
@@ -406,6 +426,10 @@ fn update_period(
     if unsaved > 0 {
         save_period(out_dir, &current)?;
     }
+    // What the period's file says now, whether or not this run changed it.
+    report.messages += current.articles.len();
+    report.unlinked += current.articles.iter().filter(|a| a.is_none()).count();
+    report.rejected += current.rejected.len();
     Ok(stop)
 }
 

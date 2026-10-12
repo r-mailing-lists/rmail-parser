@@ -146,6 +146,16 @@ fn test_sources_with_nothing_left_to_fetch_says_every_period_is_up_to_date() {
         "{stderr}"
     );
     assert!(stderr.contains("Every period is up to date"), "{stderr}");
+    // The lines the pilot's measurements are read from.
+    for line in [
+        "Indexes ahead of the raw file: 0\n",
+        "Messages in periods looked at: 4\n",
+        "Messages without a link:       0\n",
+        "Rejected pairings on file:     0\n",
+        "Older periods not looked at:   0\n",
+    ] {
+        assert!(stderr.contains(line), "{line:?} missing from:\n{stderr}");
+    }
     assert_eq!(
         std::fs::read_to_string(out.join("2026-October.json")).unwrap(),
         complete
