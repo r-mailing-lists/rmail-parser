@@ -21,7 +21,7 @@ use crate::threading::reconstruct_threads;
 /// Reads a file as a UTF-8 string, falling back to Windows-1252 (Latin-1 superset)
 /// if the file is not valid UTF-8. This handles old mbox files that contain
 /// raw 8-bit characters from various European encodings.
-fn read_file_lossy(path: &Path) -> Result<String> {
+pub fn read_file_lossy(path: &Path) -> Result<String> {
     let bytes =
         fs::read(path).with_context(|| format!("Failed to read {}", path.display()))?;
 
