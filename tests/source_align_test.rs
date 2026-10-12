@@ -81,9 +81,9 @@ fn test_align_falls_back_to_sequence_alignment_when_counts_match_but_subjects_do
 }
 
 #[test]
-fn test_align_keeps_order_within_a_thread_of_identical_subjects() {
-    // Nothing tells replies with one subject apart, so they pair in order and
-    // the one left over is the last of the run.
+fn test_align_leaves_a_run_of_identical_subjects_unlinked_when_one_has_no_partner() {
+    // Nothing tells replies with one subject apart. The raw file has three
+    // and the index two, so any of the three could be the one without a page.
     let raw = keys(&[
         "[Rd] Topic A",
         "Re: [Rd] Topic A",
@@ -97,7 +97,82 @@ fn test_align_keeps_order_within_a_thread_of_identical_subjects() {
     ];
     assert_eq!(
         pages(&align(&raw, &index)),
-        [Some("000101"), Some("000102"), None, Some("000103")]
+        [None, None, None, Some("000103")]
+    );
+}
+
+#[test]
+fn test_align_leaves_a_run_unlinked_when_the_index_has_one_more() {
+    let raw = keys(&["[Rd] Topic A", "Re: [Rd] Topic A", "[Rd] Topic B"]);
+    let index = [
+        entry("000101", "[Rd] Topic A"),
+        entry("000102", "[Rd] Topic A"),
+        entry("000103", "[Rd] Topic A"),
+        entry("000104", "[Rd] Topic B"),
+    ];
+    assert_eq!(pages(&align(&raw, &index)), [None, None, Some("000104")]);
+}
+
+#[test]
+fn test_align_links_a_run_of_identical_subjects_when_both_sides_have_as_many() {
+    // The junk message in the middle has another subject, so it raises no
+    // doubt about which reply is which.
+    let raw = keys(&[
+        "[Rd] Topic A",
+        "Re: [Rd] Topic A",
+        "Cheap watches",
+        "Re: [Rd] Topic A",
+        "[Rd] Topic B",
+    ]);
+    let index = [
+        entry("000101", "[Rd] Topic A"),
+        entry("000102", "[Rd] Topic A"),
+        entry("000103", "[Rd] Topic A"),
+        entry("000104", "[Rd] Topic B"),
+    ];
+    assert_eq!(
+        pages(&align(&raw, &index)),
+        [
+            Some("000101"),
+            Some("000102"),
+            None,
+            Some("000103"),
+            Some("000104")
+        ]
+    );
+}
+
+#[test]
+fn test_align_does_not_carry_the_doubt_past_a_pair_with_another_subject() {
+    // The extra reply at the end casts doubt on the reply before it, and not
+    // on the first message, which Topic B separates from them.
+    let raw = keys(&[
+        "[Rd] Topic A",
+        "[Rd] Topic B",
+        "Re: [Rd] Topic A",
+        "Re: [Rd] Topic A",
+    ]);
+    let index = [
+        entry("000101", "[Rd] Topic A"),
+        entry("000102", "[Rd] Topic B"),
+        entry("000103", "[Rd] Topic A"),
+    ];
+    assert_eq!(
+        pages(&align(&raw, &index)),
+        [Some("000101"), Some("000102"), None, None]
+    );
+}
+
+#[test]
+fn test_align_steps_over_a_piece_with_no_subject_inside_a_run() {
+    let raw = keys(&["[Rd] Topic A", "", "Re: [Rd] Topic A"]);
+    let index = [
+        entry("000101", "[Rd] Topic A"),
+        entry("000102", "[Rd] Topic A"),
+    ];
+    assert_eq!(
+        pages(&align(&raw, &index)),
+        [Some("000101"), None, Some("000102")]
     );
 }
 
