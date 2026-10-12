@@ -1,0 +1,48 @@
+From ada @end|ng |rom ex@mp|e@org  Fri Oct  2 23:03:32 2026
+From: ada @end|ng |rom ex@mp|e@org (Ada Example)
+Date: Fri, 2 Oct 2026 21:03:32 +0000
+Subject: [Rd] Treat multiline expressions as a single block in R Console
+ history #1666
+Message-ID: <msg-084714@example.org>
+
+Dear all,
+
+When pasting a multiline expression into the console, it is one block
+in the history on Linux, but not on Windows. Is this intended?
+
+From ben @end|ng |rom ex@mp|e@org  Sat Oct  3 01:03:46 2026
+From: ben @end|ng |rom ex@mp|e@org (Ben Example)
+Date: Sat, 3 Oct 2026 02:03:46 +0300
+Subject: [Rd] Feature request: allow denominator n in var() and sd()
+Message-ID: <msg-084715@example.org>
+
+Dear R-devel,
+
+The current var() applies Bessel?s correction. There is a precedent in
+cov.wt(..., method = "ML").
+I found a related discussion: https://stat.ethz.ch/pipermail/r-devel/2019-February/077300.html
+The argument name could follow R Core?s preferences.
+
+From cat @end|ng |rom ex@mp|e@org  Sat Oct  3 13:38:33 2026
+From: cat @end|ng |rom ex@mp|e@org (Cat Example)
+Date: Sat, 3 Oct 2026 07:38:33 -0400
+Subject: [Rd] Treat multiline expressions as a single block in R Console
+ history #1666
+In-Reply-To: <msg-084714@example.org>
+References: <msg-084714@example.org>
+Message-ID: <msg-084716@example.org>
+
+I?aki and I saw this at the Universit?t last week, and it?s the same
+there. Does that help?
+
+The notes are at https://example.org/history?id=1666 if you want them.
+
+From dan @end|ng |rom ex@mp|e@org  Sat Oct  3 11:56:13 2026
+From: dan @end|ng |rom ex@mp|e@org (Dan Example)
+Date: Sat, 03 Oct 2026 11:56:13 +0200
+Subject: [Rd]
+ [PATCH] Include Linux distribution identifiers in the default
+ HTTP User-Agent
+Message-ID: <msg-084717@example.org>
+
+Thanks for the reply, and no worries about the delay.

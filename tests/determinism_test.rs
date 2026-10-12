@@ -138,3 +138,20 @@ fn aggregating_the_same_lists_twice_writes_identical_files() {
         fs::remove_dir_all(&dir).unwrap();
     }
 }
+
+/// `tests/fixtures/golden/` holds what the parser wrote for these inputs
+/// before it knew about source pages. A list with no `sources/` directory
+/// must keep getting exactly those bytes.
+#[test]
+fn a_list_without_sources_parses_exactly_as_it_did_before() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    for (input, list, golden) in [
+        ("sample.mbox", "sample", "golden/sample"),
+        ("raw/2026-October.mbox", "r-devel", "golden/october"),
+    ] {
+        let output = scratch_dir(&format!("golden-{list}"));
+        pipeline::run_parse(&fixtures.join(input), &output, list, true, None).unwrap();
+        assert_same(&snapshot(&fixtures.join(golden)), &snapshot(&output), 0);
+        fs::remove_dir_all(&output).unwrap();
+    }
+}
