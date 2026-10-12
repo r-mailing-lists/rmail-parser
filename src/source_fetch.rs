@@ -1,6 +1,8 @@
 use std::path::Path;
+use std::thread;
+use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use mailparse::MailHeaderMap;
 use rayon::prelude::*;
 
@@ -11,6 +13,10 @@ use crate::source_align::align;
 use crate::source_index::{parse_index, subject_key, IndexEntry};
 use crate::source_page::{fix_string, parse_article, ArticlePage};
 use crate::sources::{self, needs_page, period_of, period_sort_key, PeriodSources};
+
+const USER_AGENT: &str = "rmail-parser (+https://github.com/r-mailing-lists)";
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A period's file is written after this many pages at the latest, so a run
 /// that is cut short keeps what it fetched.
@@ -27,6 +33,55 @@ pub enum Fetched {
 /// saved pages through this trait, with no network.
 pub trait Fetcher {
     fn get(&mut self, url: &str) -> anyhow::Result<Fetched>;
+}
+
+/// Fetches over HTTP, one request at a time, with a pause between requests.
+pub struct HttpFetcher {
+    agent: ureq::Agent,
+    delay: Duration,
+    last_request: Option<Instant>,
+}
+
+impl HttpFetcher {
+    pub fn new(delay_ms: u64) -> Self {
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(CONNECT_TIMEOUT)
+            .timeout(REQUEST_TIMEOUT)
+            .user_agent(USER_AGENT)
+            .build();
+        Self {
+            agent,
+            delay: Duration::from_millis(delay_ms),
+            last_request: None,
+        }
+    }
+}
+
+impl Fetcher for HttpFetcher {
+    fn get(&mut self, url: &str) -> anyhow::Result<Fetched> {
+        if let Some(last) = self.last_request {
+            let since = last.elapsed();
+            if since < self.delay {
+                thread::sleep(self.delay - since);
+            }
+        }
+        let result = self.agent.get(url).call();
+        self.last_request = Some(Instant::now());
+        match result {
+            Ok(response) => {
+                // The pages are ASCII with numeric entities. A stray byte in
+                // some other encoding comes out as U+FFFD, which is never
+                // taken as a fix.
+                let body = response
+                    .into_string()
+                    .map_err(|e| anyhow!("could not read the response: {}", e))?;
+                Ok(Fetched::Body(body))
+            }
+            Err(ureq::Error::Status(404, _)) => Ok(Fetched::NotFound),
+            Err(ureq::Error::Status(code, _)) => Err(anyhow!("HTTP {}", code)),
+            Err(e) => Err(anyhow!("{}", e)),
+        }
+    }
 }
 
 /// Limits on one run.

@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 
 use rmail_parser::message::{deobfuscate_email, extract_email_for_hash, hash_email};
 use rmail_parser::pipeline;
+use rmail_parser::source_fetch::{self, HttpFetcher, SourcesOptions, SourcesReport};
 
 #[derive(Parser)]
 #[command(name = "rmail-parser")]
@@ -33,6 +34,30 @@ enum Commands {
         /// Path to aliases.json for contributor merging
         #[arg(long)]
         aliases: Option<String>,
+        /// Directory of sources/ files written by `sources` (needs --base-url)
+        #[arg(long, requires = "base_url")]
+        sources: Option<String>,
+        /// The list's archive at the source, as given to `sources` (needs --sources)
+        #[arg(long, requires = "sources")]
+        base_url: Option<String>,
+    },
+    /// Fetch the source's index and message pages into sources/ files
+    Sources {
+        /// Directory of raw .mbox files
+        #[arg(long)]
+        raw: String,
+        /// Output directory for the per-period JSON files
+        #[arg(long)]
+        out: String,
+        /// The list's archive at the source (e.g. "https://stat.ethz.ch/pipermail/r-devel/")
+        #[arg(long)]
+        base_url: String,
+        /// Stop after this many requests
+        #[arg(long, default_value_t = 300)]
+        max_requests: usize,
+        /// Pause between requests, in milliseconds
+        #[arg(long, default_value_t = 1000)]
+        delay_ms: u64,
     },
     /// Generate stats from already-parsed processed JSON (no mbox re-parsing)
     Stats {
@@ -77,14 +102,44 @@ fn main() {
             list,
             no_stats,
             aliases,
-        } => pipeline::run_parse(
-            Path::new(&input),
-            Path::new(&output),
-            &list,
-            !no_stats,
-            aliases.as_deref().map(Path::new),
-            None,
-        ),
+            sources,
+            base_url,
+        } => {
+            // clap has already made sure the two come together.
+            let source_pages = match (&sources, &base_url) {
+                (Some(dir), Some(base)) => Some((Path::new(dir), base.as_str())),
+                _ => None,
+            };
+            pipeline::run_parse(
+                Path::new(&input),
+                Path::new(&output),
+                &list,
+                !no_stats,
+                aliases.as_deref().map(Path::new),
+                source_pages,
+            )
+        }
+        Commands::Sources {
+            raw,
+            out,
+            base_url,
+            max_requests,
+            delay_ms,
+        } => {
+            let opts = SourcesOptions {
+                max_requests,
+                ..SourcesOptions::default()
+            };
+            let mut fetcher = HttpFetcher::new(delay_ms);
+            source_fetch::run_sources(
+                Path::new(&raw),
+                Path::new(&out),
+                &base_url,
+                &opts,
+                &mut fetcher,
+            )
+            .map(|report| print_sources_report(&report))
+        }
         Commands::Stats {
             input,
             output,
@@ -114,6 +169,21 @@ fn main() {
     if let Err(e) = result {
         eprintln!("Error: {:#}", e);
         std::process::exit(1);
+    }
+}
+
+/// Prints what a `sources` run did. A run that stopped early says so here
+/// and still succeeds: the next run carries on from the files it wrote.
+fn print_sources_report(report: &SourcesReport) {
+    eprintln!("Periods indexed:               {}", report.periods_indexed);
+    eprintln!("Pages fetched:                 {}", report.pages_fetched);
+    eprintln!("Characters restored:           {}", report.chars_restored);
+    eprintln!("? left as they were:           {}", report.chars_left);
+    eprintln!("Pages naming another message:  {}", report.mismatches);
+    eprintln!("Characters beyond U+FFFF seen: {}", report.astral_chars);
+    match &report.stopped {
+        Some(reason) => eprintln!("Stopped early: {}", reason),
+        None => eprintln!("Every period is up to date"),
     }
 }
 
