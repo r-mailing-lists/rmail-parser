@@ -173,7 +173,9 @@ fn main() {
 }
 
 /// Prints what a `sources` run did. A run that stopped early says so here
-/// and still succeeds: the next run carries on from the files it wrote.
+/// and still succeeds: the next run carries on from the files it wrote. A
+/// run that reached the end but did not get everything it asked for says
+/// that, and not that every period is up to date.
 fn print_sources_report(report: &SourcesReport) {
     eprintln!("Periods indexed:               {}", report.periods_indexed);
     eprintln!("Pages fetched:                 {}", report.pages_fetched);
@@ -181,9 +183,14 @@ fn print_sources_report(report: &SourcesReport) {
     eprintln!("? left as they were:           {}", report.chars_left);
     eprintln!("Pages naming another message:  {}", report.mismatches);
     eprintln!("Characters beyond U+FFFF seen: {}", report.astral_chars);
+    eprintln!("Requests that failed:          {}", report.failed);
+    eprintln!("Pages the source did not have: {}", report.not_found);
     match &report.stopped {
         Some(reason) => eprintln!("Stopped early: {}", reason),
-        None => eprintln!("Every period is up to date"),
+        None if report.failed == 0 && report.not_found == 0 => {
+            eprintln!("Every period is up to date")
+        }
+        None => eprintln!("Not everything was fetched; the next run will ask again"),
     }
 }
 

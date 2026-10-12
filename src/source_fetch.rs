@@ -25,7 +25,8 @@ const SAVE_EVERY: usize = 50;
 /// What the source answered.
 pub enum Fetched {
     Body(String),
-    /// HTTP 404: the source has no such page.
+    /// HTTP 404: the source says it has no such page. A run does not take
+    /// its word for it.
     NotFound,
 }
 
@@ -89,7 +90,7 @@ impl Fetcher for HttpFetcher {
 pub struct SourcesOptions {
     /// Requests the run may make, whatever their outcome.
     pub max_requests: usize,
-    /// Failures in a row that end the run.
+    /// Failures in a row that end the run. A "not found" answer is one.
     pub max_failures: usize,
 }
 
@@ -118,6 +119,12 @@ pub struct SourcesReport {
     /// Characters beyond U+FFFF seen in fetched pages. The text file has two
     /// `?` for each, which this version does not restore.
     pub astral_chars: usize,
+    /// Requests the source answered with "not found". Nothing is recorded
+    /// for them, so the same pages are asked for again on a later run.
+    pub not_found: usize,
+    /// Requests that failed, or returned something that was not the page
+    /// asked for.
+    pub failed: usize,
     /// Why the run ended before every period was up to date, if it did.
     pub stopped: Option<String>,
 }
@@ -125,8 +132,10 @@ pub struct SourcesReport {
 /// The outcome of asking the source for one page.
 enum Asked<T> {
     Got(T),
-    NotFound,
-    /// The request failed, or what came back was not the page asked for.
+    /// The page did not arrive: the source said "not found", the request
+    /// failed, or what came back was not the page asked for. None of these
+    /// is taken to say anything about the page, so the caller records
+    /// nothing and the page is asked for again on a later run.
     Failed,
     /// The run is over: the reason why.
     Stop(String),
@@ -137,13 +146,20 @@ struct Budget<'a> {
     fetcher: &'a mut dyn Fetcher,
     opts: &'a SourcesOptions,
     requests: usize,
+    /// Requests in a row that did not bring the page asked for.
     failures: usize,
+    /// Requests answered "not found", over the whole run.
+    not_found: usize,
+    /// Requests that failed in any other way, over the whole run.
+    failed: usize,
 }
 
 impl Budget<'_> {
     /// Asks for `url` and reads the answer with `parse`. An answer `parse`
     /// cannot read counts as a failure: a source that is down often says so
-    /// with an error page and a 200.
+    /// with an error page and a 200. So does a "not found": from this source
+    /// it is far more often a passing fault or a wrong address than a page
+    /// that is gone, and believing it would write the fault down for good.
     fn ask<T>(&mut self, url: &str, parse: impl FnOnce(&str) -> Option<T>) -> Asked<T> {
         if self.requests >= self.opts.max_requests {
             return Asked::Stop(format!(
@@ -158,13 +174,19 @@ impl Budget<'_> {
                     self.failures = 0;
                     return Asked::Got(page);
                 }
-                None => "not the page expected".to_string(),
+                None => {
+                    self.failed += 1;
+                    "not the page expected".to_string()
+                }
             },
             Ok(Fetched::NotFound) => {
-                self.failures = 0;
-                return Asked::NotFound;
+                self.not_found += 1;
+                "not found".to_string()
             }
-            Err(e) => format!("{:#}", e),
+            Err(e) => {
+                self.failed += 1;
+                format!("{:#}", e)
+            }
         };
         eprintln!("Warning: {}: {}", url, problem);
         self.failures += 1;
@@ -181,6 +203,10 @@ impl Budget<'_> {
 /// message that may have a character to restore. Periods are taken newest
 /// first, and each period's file is written as soon as there is something to
 /// write, so the next run picks up where this one stopped.
+///
+/// Only a page that arrived is ever written down. A request that fails, or
+/// that the source answers with "not found", changes no file: the period or
+/// the message is left as it was and asked for again on a later run.
 ///
 /// Running out of budget or giving up on a source that keeps failing is not
 /// an error: the report says why the run stopped.
@@ -209,6 +235,8 @@ pub fn run_sources(
         opts,
         requests: 0,
         failures: 0,
+        not_found: 0,
+        failed: 0,
     };
 
     for file_path in &files {
@@ -232,6 +260,8 @@ pub fn run_sources(
             break;
         }
     }
+    report.not_found = budget.not_found;
+    report.failed = budget.failed;
     Ok(report)
 }
 
@@ -259,21 +289,9 @@ fn update_period(
                     report.periods_indexed += 1;
                     align(&keys, &index)
                 }
-                // A file that links pages is proof they exist: a 404 for the
-                // index is not believed, and the file is left as it is.
-                Asked::NotFound
-                    if stale
-                        .as_ref()
-                        .is_some_and(|s| s.articles.iter().any(|a| a.is_some())) =>
-                {
-                    eprintln!(
-                        "Warning: {}/date.html is a 404 but {} has pages on file, leaving it as it is",
-                        period, period
-                    );
-                    return Ok(None);
-                }
-                // Recorded as a period without pages, so it is not asked for again.
-                Asked::NotFound => vec![None; raw_messages.len()],
+                // No index, so nothing is known about this period: its file
+                // is left as it is, or left unwritten, and the index is
+                // asked for again on a later run.
                 Asked::Failed => return Ok(None),
                 Asked::Stop(reason) => return Ok(Some(reason)),
             };
@@ -331,13 +349,8 @@ fn update_period(
                     current.fixes.insert(number, fix);
                 }
             }
-            Asked::NotFound => {
-                eprintln!(
-                    "Warning: {}/{}.html is listed in the index but is not there, unlinking it",
-                    period, number
-                );
-                current.articles[i] = None;
-            }
+            // The message keeps its page number and gets no fix, so its
+            // page is asked for again on a later run.
             Asked::Failed => continue,
             Asked::Stop(reason) => {
                 stop = Some(reason);

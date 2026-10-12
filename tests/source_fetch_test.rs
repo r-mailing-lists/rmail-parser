@@ -70,6 +70,8 @@ fn test_first_run_indexes_the_period_and_fetches_only_the_pages_it_needs() {
             chars_left: 4,
             mismatches: 0,
             astral_chars: 0,
+            not_found: 0,
+            failed: 0,
             stopped: None,
         }
     );
@@ -170,7 +172,7 @@ fn test_quarterly_and_annual_periods_use_their_own_names() {
 }
 
 #[test]
-fn test_an_index_that_is_a_404_is_recorded_and_not_asked_for_again() {
+fn test_an_index_that_is_not_found_writes_no_file_and_is_asked_for_again() {
     let raw = scratch_dir("no-index-raw");
     let out = scratch_dir("no-index-out");
     let mbox = raw_message(1, "[Rd] Topic A", "na?ve") + &raw_message(2, "[Rd] Topic B", "Plain.");
@@ -179,34 +181,67 @@ fn test_an_index_that_is_a_404_is_recorded_and_not_asked_for_again() {
     let mut source = FakeFetcher::new();
     let report = run(&raw, &out, &mut source);
     assert_eq!(source.asked_paths(), ["2026-October/date.html"]);
-    assert_eq!(pages(&saved(&out, "2026-October")), [None, None]);
-    assert_eq!(report.periods_indexed, 0);
-    assert_eq!(report.stopped, None);
+    assert_eq!(fs::read_dir(&out).unwrap().count(), 0);
+    assert_eq!(
+        report,
+        SourcesReport {
+            not_found: 1,
+            ..SourcesReport::default()
+        }
+    );
 
+    // The next run asks again. The source has the index by then, and the
+    // period is indexed as it would have been the first time.
     let mut source = FakeFetcher::new();
-    run(&raw, &out, &mut source);
-    assert!(source.asked.is_empty());
+    source.serve(
+        "2026-October/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic B")]),
+    );
+    source.serve(
+        "2026-October/000101.html",
+        &article_page("m1@example.org", "na&#239;ve"),
+    );
+    let report = run(&raw, &out, &mut source);
+    assert_eq!(
+        source.asked_paths(),
+        ["2026-October/date.html", "2026-October/000101.html"]
+    );
+    let indexed = saved(&out, "2026-October");
+    assert_eq!(pages(&indexed), [Some("000101"), Some("000102")]);
+    assert_eq!(indexed.fixes["000101"], "\u{ef}");
+    assert_eq!(report.periods_indexed, 1);
+    assert_eq!(report.not_found, 0);
+    assert_eq!(report.stopped, None);
 }
 
 /// Six messages that each need their page, with the index and pages for them.
 fn six_damaged_messages(raw: &Path) -> FakeFetcher {
+    damaged_messages(raw, 6, &[1, 2, 3, 4, 5, 6])
+}
+
+/// `count` messages that each need their page, written to `raw` as
+/// `2026-February.mbox`, and a source that has the index for all of them
+/// but only the pages of the messages numbered in `served`.
+fn damaged_messages(raw: &Path, count: usize, served: &[usize]) -> FakeFetcher {
     let mut mbox = String::new();
     let mut entries = Vec::new();
     let mut source = FakeFetcher::new();
-    for n in 1..=6 {
+    for n in 1..=count {
         mbox.push_str(&raw_message(
             n,
             &format!("[Rd] Topic {n}"),
             &format!("A na?ve question, number {n}."),
         ));
         entries.push((format!("00010{n}"), format!("[Rd] Topic {n}")));
-        source.serve(
-            &format!("2026-February/00010{n}.html"),
-            &article_page(
-                &format!("m{n}@example.org"),
-                &format!("A na&#239;ve question, number {n}."),
-            ),
-        );
+        if served.contains(&n) {
+            source.serve(
+                &format!("2026-February/00010{n}.html"),
+                &article_page(
+                    &format!("m{n}@example.org"),
+                    &format!("A na&#239;ve question, number {n}."),
+                ),
+            );
+        }
     }
     fs::write(raw.join("2026-February.mbox"), mbox).unwrap();
     let entries: Vec<(&str, &str)> = entries
@@ -244,6 +279,8 @@ fn test_source_going_down_part_way_through_a_period_keeps_what_was_fetched() {
         Some("3 requests in a row failed")
     );
     assert_eq!(report.pages_fetched, 2);
+    assert_eq!(report.failed, 3);
+    assert_eq!(report.not_found, 0);
 
     // The period's file is valid and holds the two pages that did arrive.
     let partial = saved(&out, "2026-February");
@@ -293,6 +330,8 @@ fn test_an_error_page_served_with_a_200_records_nothing() {
         report.stopped.as_deref(),
         Some("3 requests in a row failed")
     );
+    assert_eq!(report.failed, 3);
+    assert_eq!(report.not_found, 0);
     assert_eq!(fs::read_dir(&out).unwrap().count(), 0);
 }
 
@@ -436,29 +475,275 @@ fn test_a_page_that_names_no_message_id_is_taken_on_trust() {
 }
 
 #[test]
-fn test_a_message_page_that_is_a_404_is_unlinked() {
+fn test_a_message_page_that_is_not_found_stays_linked_and_is_asked_for_again() {
     let raw = scratch_dir("no-page-raw");
     let out = scratch_dir("no-page-out");
-    fs::write(
-        raw.join("2026-February.mbox"),
-        raw_message(1, "[Rd] Topic A", "A na?ve question."),
-    )
-    .unwrap();
+    // The index lists three pages, and the source does not have the second.
+    let mut source = damaged_messages(&raw, 3, &[1, 3]);
+
+    let report = run(&raw, &out, &mut source);
+
+    // The pages after it are fetched all the same.
+    assert_eq!(
+        source.asked_paths(),
+        [
+            "2026-February/date.html",
+            "2026-February/000101.html",
+            "2026-February/000102.html",
+            "2026-February/000103.html",
+        ]
+    );
+    let after = saved(&out, "2026-February");
+    assert_eq!(
+        pages(&after),
+        [Some("000101"), Some("000102"), Some("000103")]
+    );
+    assert_eq!(after.fixes.keys().collect::<Vec<_>>(), ["000101", "000103"]);
+    assert_eq!(report.pages_fetched, 2);
+    assert_eq!(report.not_found, 1);
+    assert_eq!(report.failed, 0);
+    assert_eq!(report.stopped, None);
+
+    // Still not there on the next run: asked for again, and nothing changes.
+    let before = fs::read(out.join("2026-February.json")).unwrap();
+    let mut source = damaged_messages(&raw, 3, &[1, 3]);
+    let report = run(&raw, &out, &mut source);
+    assert_eq!(source.asked_paths(), ["2026-February/000102.html"]);
+    assert_eq!(report.not_found, 1);
+    assert!(before == fs::read(out.join("2026-February.json")).unwrap());
+
+    // The source has it now, and it is fetched like any other page.
+    let mut source = damaged_messages(&raw, 3, &[1, 2, 3]);
+    let report = run(&raw, &out, &mut source);
+    assert_eq!(source.asked_paths(), ["2026-February/000102.html"]);
+    assert_eq!(saved(&out, "2026-February").fixes["000102"], "\u{ef}");
+    assert_eq!(report.pages_fetched, 1);
+    assert_eq!(report.not_found, 0);
+}
+
+#[test]
+fn test_message_pages_that_are_not_found_stop_the_run_and_stay_linked() {
+    let raw = scratch_dir("no-pages-raw");
+    let out = scratch_dir("no-pages-out");
+    // The index arrives, and every page it lists is "not found".
+    let mut source = damaged_messages(&raw, 6, &[]);
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(
+        source.asked_paths(),
+        [
+            "2026-February/date.html",
+            "2026-February/000101.html",
+            "2026-February/000102.html",
+            "2026-February/000103.html",
+        ]
+    );
+    assert_eq!(
+        report,
+        SourcesReport {
+            periods_indexed: 1,
+            not_found: 3,
+            stopped: Some("3 requests in a row failed".to_string()),
+            ..SourcesReport::default()
+        }
+    );
+    let after = saved(&out, "2026-February");
+    assert_eq!(
+        pages(&after),
+        [
+            Some("000101"),
+            Some("000102"),
+            Some("000103"),
+            Some("000104"),
+            Some("000105"),
+            Some("000106"),
+        ]
+    );
+    assert!(after.fixes.is_empty());
+}
+
+#[test]
+fn test_a_source_that_has_nothing_stops_the_run_and_writes_no_file() {
+    let raw = scratch_dir("nothing-raw");
+    let out = scratch_dir("nothing-out");
+    for period in [
+        "2026-January",
+        "2026-February",
+        "2026-March",
+        "2026-April",
+        "2026-May",
+    ] {
+        fs::write(
+            raw.join(format!("{period}.mbox")),
+            raw_message(1, "[Rd] Topic", "A na?ve question."),
+        )
+        .unwrap();
+    }
+
+    // What a mistyped base URL looks like: every answer is "not found".
     let mut source = FakeFetcher::new();
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked.len(), SourcesOptions::default().max_failures);
+    assert_eq!(
+        source.asked_paths(),
+        [
+            "2026-May/date.html",
+            "2026-April/date.html",
+            "2026-March/date.html",
+        ]
+    );
+    assert_eq!(
+        report,
+        SourcesReport {
+            not_found: 3,
+            stopped: Some("3 requests in a row failed".to_string()),
+            ..SourcesReport::default()
+        }
+    );
+    assert_eq!(fs::read_dir(&out).unwrap().count(), 0);
+}
+
+#[test]
+fn test_not_found_and_failed_requests_in_a_row_add_up_to_the_limit() {
+    let raw = scratch_dir("mixed-raw");
+    let out = scratch_dir("mixed-out");
+    let mut source = FakeFetcher::new();
+    for period in ["2026-January", "2026-February", "2026-March", "2026-April"] {
+        fs::write(
+            raw.join(format!("{period}.mbox")),
+            raw_message(1, "[Rd] Topic", "Plain text."),
+        )
+        .unwrap();
+    }
+    // April answers with an error page, March is not found, and by February
+    // the connection is refused. January would have been fine.
     source.serve(
-        "2026-February/date.html",
-        &index_page(&[("000101", "[Rd] Topic A")]),
+        "2026-April/date.html",
+        "<html><body>Service unavailable</body></html>",
+    );
+    for period in ["2026-February", "2026-January"] {
+        source.serve(
+            &format!("{period}/date.html"),
+            &index_page(&[("000101", "[Rd] Topic")]),
+        );
+    }
+    source.down_after = Some(2);
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(
+        source.asked_paths(),
+        [
+            "2026-April/date.html",
+            "2026-March/date.html",
+            "2026-February/date.html",
+        ]
+    );
+    assert_eq!(
+        report,
+        SourcesReport {
+            not_found: 1,
+            failed: 2,
+            stopped: Some("3 requests in a row failed".to_string()),
+            ..SourcesReport::default()
+        }
+    );
+    assert_eq!(fs::read_dir(&out).unwrap().count(), 0);
+}
+
+#[test]
+fn test_an_answer_after_a_not_found_starts_the_count_again() {
+    let raw = scratch_dir("reset-raw");
+    let out = scratch_dir("reset-out");
+    let mut source = FakeFetcher::new();
+    for period in [
+        "2026-January",
+        "2026-February",
+        "2026-March",
+        "2026-April",
+        "2026-May",
+    ] {
+        fs::write(
+            raw.join(format!("{period}.mbox")),
+            raw_message(1, "[Rd] Topic", "Plain text."),
+        )
+        .unwrap();
+    }
+    // Two periods not found, one that is there, two more not found: four in
+    // all, but never three in a row.
+    source.serve(
+        "2026-March/date.html",
+        &index_page(&[("000101", "[Rd] Topic")]),
     );
 
     let report = run(&raw, &out, &mut source);
 
     assert_eq!(
         source.asked_paths(),
-        ["2026-February/date.html", "2026-February/000101.html"]
+        [
+            "2026-May/date.html",
+            "2026-April/date.html",
+            "2026-March/date.html",
+            "2026-February/date.html",
+            "2026-January/date.html",
+        ]
     );
-    assert_eq!(pages(&saved(&out, "2026-February")), [None]);
-    assert_eq!(report.pages_fetched, 0);
-    assert_eq!(report.stopped, None);
+    assert_eq!(
+        report,
+        SourcesReport {
+            periods_indexed: 1,
+            not_found: 4,
+            ..SourcesReport::default()
+        }
+    );
+    // Only the period that was answered has a file.
+    assert_eq!(fs::read_dir(&out).unwrap().count(), 1);
+    assert_eq!(pages(&saved(&out, "2026-March")), [Some("000101")]);
+}
+
+#[test]
+fn test_a_not_found_answer_counts_against_the_request_budget() {
+    let raw = scratch_dir("budget-404-raw");
+    let out = scratch_dir("budget-404-out");
+    let mut source = FakeFetcher::new();
+    for period in ["2026-January", "2026-February", "2026-March"] {
+        fs::write(
+            raw.join(format!("{period}.mbox")),
+            raw_message(1, "[Rd] Topic", "Plain text."),
+        )
+        .unwrap();
+    }
+    // March, the first asked for, is not found.
+    for period in ["2026-January", "2026-February"] {
+        source.serve(
+            &format!("{period}/date.html"),
+            &index_page(&[("000101", "[Rd] Topic")]),
+        );
+    }
+
+    let opts = SourcesOptions {
+        max_requests: 2,
+        ..SourcesOptions::default()
+    };
+    let report = run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+
+    assert_eq!(
+        source.asked_paths(),
+        ["2026-March/date.html", "2026-February/date.html"]
+    );
+    assert_eq!(
+        report,
+        SourcesReport {
+            periods_indexed: 1,
+            not_found: 1,
+            stopped: Some("request budget of 2 spent".to_string()),
+            ..SourcesReport::default()
+        }
+    );
+    assert_eq!(fs::read_dir(&out).unwrap().count(), 1);
+    assert!(out.join("2026-February.json").exists());
 }
 
 #[test]
@@ -648,24 +933,36 @@ fn test_an_index_404_does_not_erase_a_period_that_has_links() {
 }
 
 #[test]
-fn test_an_index_404_for_a_period_that_links_nothing_is_recorded_again() {
+fn test_an_index_that_is_not_found_leaves_a_file_that_links_nothing_as_it_is() {
     let raw = scratch_dir("links-nothing-raw");
     let out = scratch_dir("links-nothing-out");
     let first = raw_message(1, "[Rd] Topic A", "A na?ve question.");
     fs::write(raw.join("2026-February.mbox"), &first).unwrap();
-    run(&raw, &out, &mut FakeFetcher::new());
+    // The period has been indexed, and no entry matched its one message.
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Another topic")]),
+    );
+    run(&raw, &out, &mut source);
     assert_eq!(pages(&saved(&out, "2026-February")), [None]);
+    let kept = fs::read(out.join("2026-February.json")).unwrap();
 
+    // The raw file grows, and the index is not found.
     let grown = first + &raw_message(2, "[Rd] Topic B", "Plain.");
     fs::write(raw.join("2026-February.mbox"), grown).unwrap();
     let mut source = FakeFetcher::new();
-    run(&raw, &out, &mut source);
+    let report = run(&raw, &out, &mut source);
     assert_eq!(source.asked_paths(), ["2026-February/date.html"]);
-    assert_eq!(pages(&saved(&out, "2026-February")), [None, None]);
+    assert!(kept == fs::read(out.join("2026-February.json")).unwrap());
+    assert_eq!(report.periods_indexed, 0);
+    assert_eq!(report.not_found, 1);
 
+    // The next run asks for it again, and again writes nothing.
     let mut source = FakeFetcher::new();
     run(&raw, &out, &mut source);
-    assert!(source.asked.is_empty());
+    assert_eq!(source.asked_paths(), ["2026-February/date.html"]);
+    assert!(kept == fs::read(out.join("2026-February.json")).unwrap());
 }
 
 #[test]
