@@ -2,6 +2,7 @@ pub mod mbox;
 pub mod message;
 pub mod output;
 pub mod pipeline;
+pub mod source_align;
 pub mod source_index;
 pub mod source_page;
 pub mod sources;
