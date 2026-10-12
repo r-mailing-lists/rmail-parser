@@ -30,9 +30,17 @@ pub fn parse_article(html: &str) -> Option<ArticlePage> {
     })
 }
 
-/// Decodes numeric entities (`&#8217;`, `&#xE4;`) and the six named ones
-/// pipermail writes. Anything else that starts with `&` is left as it is.
-/// A number that is not a character becomes U+FFFD, as it does in a browser.
+/// Decodes numeric character references, decimal (`&#8217;`) and hexadecimal
+/// (`&#xE4;`), and the six named ones pipermail writes: `lt`, `gt`, `amp`,
+/// `quot`, `apos` and `nbsp`. Each has to end in `;`. Anything else that
+/// starts with `&` is left as it is.
+///
+/// A number from 128 to 159 is read as the HTML standard reads it, as the
+/// character Windows-1252 has at that byte: `&#146;` is U+2019, the right
+/// single quote a browser shows for it. The five bytes Windows-1252 does not
+/// use (129, 141, 143, 144 and 157) stay the control characters U+0081 and
+/// so on. Zero, half of a surrogate pair and a number past U+10FFFF become
+/// U+FFFD. Every other number is the character with that code point.
 pub fn decode_entities(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
@@ -77,10 +85,43 @@ fn decode_entity(s: &str) -> Option<(char, usize)> {
     Some((ch, end + 1))
 }
 
+/// The character a numeric reference names. Mailman writes the code point
+/// Python decoded, and mail labelled ISO-8859-1 that holds Windows-1252
+/// quotes and dashes decodes to 128 to 159. Those are read as the byte they
+/// stand for, by the table the HTML standard gives.
 fn char_from_code(code: u32) -> char {
-    match char::from_u32(code) {
-        Some(ch) if ch != '\0' => ch,
-        _ => '\u{fffd}',
+    match code {
+        0x80 => '\u{20ac}',
+        0x82 => '\u{201a}',
+        0x83 => '\u{192}',
+        0x84 => '\u{201e}',
+        0x85 => '\u{2026}',
+        0x86 => '\u{2020}',
+        0x87 => '\u{2021}',
+        0x88 => '\u{2c6}',
+        0x89 => '\u{2030}',
+        0x8a => '\u{160}',
+        0x8b => '\u{2039}',
+        0x8c => '\u{152}',
+        0x8e => '\u{17d}',
+        0x91 => '\u{2018}',
+        0x92 => '\u{2019}',
+        0x93 => '\u{201c}',
+        0x94 => '\u{201d}',
+        0x95 => '\u{2022}',
+        0x96 => '\u{2013}',
+        0x97 => '\u{2014}',
+        0x98 => '\u{2dc}',
+        0x99 => '\u{2122}',
+        0x9a => '\u{161}',
+        0x9b => '\u{203a}',
+        0x9c => '\u{153}',
+        0x9e => '\u{17e}',
+        0x9f => '\u{178}',
+        _ => match char::from_u32(code) {
+            Some(ch) if ch != '\0' => ch,
+            _ => '\u{fffd}',
+        },
     }
 }
 
@@ -143,7 +184,8 @@ fn percent_decode(s: &str) -> String {
 
 /// Works out what each `?` in `body` should be, from the page's text. The
 /// result has one character per `?`, in order: the character to restore, or
-/// `?` to leave it alone.
+/// `?` to leave it alone. A page character is taken only when it is not
+/// ASCII, not U+FFFD and not a control character.
 ///
 /// The two texts are not compared position by position, because the page and
 /// the text file obscure addresses differently. Each `?` is looked up by the
@@ -165,8 +207,9 @@ pub fn fix_string(body: &str, page_text: &str) -> String {
             cursor = spot + 1;
         }
         match found.map(|spot| page[spot]) {
-            // U+FFFD means the source lost the character too.
-            Some(ch) if !ch.is_ascii() && ch != '\u{fffd}' => fix.push(ch),
+            // U+FFFD means the source lost the character too, and a control
+            // character is nothing a reader of the page sees.
+            Some(ch) if !ch.is_ascii() && ch != '\u{fffd}' && !ch.is_control() => fix.push(ch),
             _ => fix.push('?'),
         }
     }
