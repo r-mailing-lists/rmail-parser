@@ -204,6 +204,19 @@ fn update_period(
                     report.periods_indexed += 1;
                     align(&keys, &index)
                 }
+                // A file that links pages is proof they exist: a 404 for the
+                // index is not believed, and the file is left as it is.
+                Asked::NotFound
+                    if stale
+                        .as_ref()
+                        .is_some_and(|s| s.articles.iter().any(|a| a.is_some())) =>
+                {
+                    eprintln!(
+                        "Warning: {}/date.html is a 404 but {} has pages on file, leaving it as it is",
+                        period, period
+                    );
+                    return Ok(None);
+                }
                 // Recorded as a period without pages, so it is not asked for again.
                 Asked::NotFound => vec![None; raw_messages.len()],
                 Asked::Failed => return Ok(None),

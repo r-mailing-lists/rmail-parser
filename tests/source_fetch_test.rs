@@ -601,3 +601,91 @@ fn test_a_raw_directory_without_messages() {
     assert!(source.asked.is_empty());
     assert_eq!(report, SourcesReport::default());
 }
+
+#[test]
+fn test_an_index_404_does_not_erase_a_period_that_has_links() {
+    let raw = scratch_dir("keep-links-raw");
+    let out = scratch_dir("keep-links-out");
+    let first = raw_message(1, "[Rd] Topic A", "A na?ve question.");
+    fs::write(raw.join("2026-February.mbox"), &first).unwrap();
+    let page_1 = article_page("m1@example.org", "A na&#239;ve question.");
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A")]),
+    );
+    source.serve("2026-February/000101.html", &page_1);
+    run(&raw, &out, &mut source);
+    let kept = fs::read(out.join("2026-February.json")).unwrap();
+    assert_eq!(saved(&out, "2026-February").fixes["000101"], "\u{ef}");
+
+    // The raw file grows, and the source answers 404 for the index.
+    let grown = first + &raw_message(2, "Re: [Rd] Topic A", "Not na?ve at all.");
+    fs::write(raw.join("2026-February.mbox"), &grown).unwrap();
+    let mut source = FakeFetcher::new();
+    let report = run(&raw, &out, &mut source);
+    assert_eq!(source.asked_paths(), ["2026-February/date.html"]);
+    assert!(kept == fs::read(out.join("2026-February.json")).unwrap());
+    assert_eq!(report.periods_indexed, 0);
+    assert_eq!(report.pages_fetched, 0);
+
+    // The source is back: the period is indexed, and the earlier fix stays.
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic A")]),
+    );
+    source.serve("2026-February/000101.html", &page_1);
+    source.serve(
+        "2026-February/000102.html",
+        &article_page("m2@example.org", "Not na&#239;ve at all."),
+    );
+    let report = run(&raw, &out, &mut source);
+    assert_eq!(report.periods_indexed, 1);
+    let again = saved(&out, "2026-February");
+    assert_eq!(pages(&again), [Some("000101"), Some("000102")]);
+    assert_eq!(again.fixes.len(), 2);
+}
+
+#[test]
+fn test_an_index_404_for_a_period_that_links_nothing_is_recorded_again() {
+    let raw = scratch_dir("links-nothing-raw");
+    let out = scratch_dir("links-nothing-out");
+    let first = raw_message(1, "[Rd] Topic A", "A na?ve question.");
+    fs::write(raw.join("2026-February.mbox"), &first).unwrap();
+    run(&raw, &out, &mut FakeFetcher::new());
+    assert_eq!(pages(&saved(&out, "2026-February")), [None]);
+
+    let grown = first + &raw_message(2, "[Rd] Topic B", "Plain.");
+    fs::write(raw.join("2026-February.mbox"), grown).unwrap();
+    let mut source = FakeFetcher::new();
+    run(&raw, &out, &mut source);
+    assert_eq!(source.asked_paths(), ["2026-February/date.html"]);
+    assert_eq!(pages(&saved(&out, "2026-February")), [None, None]);
+
+    let mut source = FakeFetcher::new();
+    run(&raw, &out, &mut source);
+    assert!(source.asked.is_empty());
+}
+
+#[test]
+fn test_a_period_file_that_cannot_be_read_stops_the_run_and_is_left_alone() {
+    let raw = scratch_dir("unreadable-raw");
+    let out = scratch_dir("unreadable-out");
+    fs::write(
+        raw.join("2026-February.mbox"),
+        raw_message(1, "[Rd] Topic A", "A na?ve question."),
+    )
+    .unwrap();
+    fs::write(out.join("2026-February.json"), "this is not json").unwrap();
+
+    let mut source = FakeFetcher::new();
+    let err = run_sources(&raw, &out, BASE, &SourcesOptions::default(), &mut source).unwrap_err();
+
+    assert!(format!("{:#}", err).contains("2026-February.json"));
+    assert!(source.asked.is_empty());
+    assert_eq!(
+        fs::read(out.join("2026-February.json")).unwrap(),
+        b"this is not json"
+    );
+}
