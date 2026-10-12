@@ -67,11 +67,13 @@ pub fn period_sort_key(period: &str) -> (i32, u32) {
 /// Reads `<dir>/<period>.json`. `None` when the period has no file yet.
 pub fn load(dir: &Path, period: &str) -> Result<Option<PeriodSources>> {
     let path = dir.join(format!("{}.json", period));
-    if !path.exists() {
-        return Ok(None);
-    }
-    let raw =
-        fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
+    let raw = match fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => {
+            return Err(e).with_context(|| format!("Failed to read {}", path.display()));
+        }
+    };
     let sources = serde_json::from_str(&raw)
         .with_context(|| format!("Failed to parse {}", path.display()))?;
     Ok(Some(sources))

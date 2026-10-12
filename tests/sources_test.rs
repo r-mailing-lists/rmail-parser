@@ -116,6 +116,18 @@ fn test_load_of_a_damaged_file_is_an_error_naming_it() {
 }
 
 #[test]
+fn test_load_fails_when_the_file_cannot_be_read() {
+    let dir = scratch_dir("unreadable");
+    // Making the directory a regular file means opening the period file
+    // fails, and not because it is missing.
+    let not_a_dir = dir.join("not-a-dir");
+    fs::write(&not_a_dir, "").unwrap();
+    let err = load(&not_a_dir, "2026-October").unwrap_err();
+    assert!(format!("{:#}", err).contains("2026-October.json"));
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn test_needs_page() {
     assert!(needs_page("The current var() applies Bessel?s correction."));
     assert!(needs_page("an der Universit?t Z?rich"));
