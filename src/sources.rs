@@ -64,7 +64,9 @@ pub fn period_sort_key(period: &str) -> (i32, u32) {
     }
 }
 
-/// Reads `<dir>/<period>.json`. `None` when the period has no file yet.
+/// Reads `<dir>/<period>.json`. `None` when the period has no file yet. An
+/// error when the file cannot be read, is damaged, or says it describes
+/// another period.
 pub fn load(dir: &Path, period: &str) -> Result<Option<PeriodSources>> {
     let path = dir.join(format!("{}.json", period));
     let raw = match fs::read_to_string(&path) {
@@ -74,8 +76,18 @@ pub fn load(dir: &Path, period: &str) -> Result<Option<PeriodSources>> {
             return Err(e).with_context(|| format!("Failed to read {}", path.display()));
         }
     };
-    let sources = serde_json::from_str(&raw)
+    let sources: PeriodSources = serde_json::from_str(&raw)
         .with_context(|| format!("Failed to parse {}", path.display()))?;
+    // A file copied or renamed from another period would otherwise be saved
+    // over, or have its pages linked into, a period it does not describe.
+    if sources.period != period {
+        anyhow::bail!(
+            "{} describes period {}, not {}",
+            path.display(),
+            sources.period,
+            period
+        );
+    }
     Ok(Some(sources))
 }
 

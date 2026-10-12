@@ -194,6 +194,30 @@ fn test_load_of_a_damaged_file_is_an_error_naming_it() {
 }
 
 #[test]
+fn test_load_refuses_a_file_that_describes_another_period() {
+    let dir = scratch_dir("another-period");
+    save(&dir, &sample()).unwrap();
+    // October's file under September's name, as a copy or a rename leaves it.
+    fs::copy(
+        dir.join("2026-October.json"),
+        dir.join("2026-September.json"),
+    )
+    .unwrap();
+
+    let err = load(&dir, "2026-September").unwrap_err();
+    let message = format!("{:#}", err);
+    assert!(message.contains("2026-September.json"), "{message}");
+    assert!(
+        message.contains("describes period 2026-October, not 2026-September"),
+        "{message}"
+    );
+
+    // The file it was copied from is read as before.
+    assert_eq!(load(&dir, "2026-October").unwrap().unwrap(), sample());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn test_load_fails_when_the_file_cannot_be_read() {
     let dir = scratch_dir("unreadable");
     // Making the directory a regular file means opening the period file
