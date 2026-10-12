@@ -133,11 +133,13 @@ pub struct SourcesReport {
     /// Periods indexed in this run whose index listed more pages than the
     /// raw file has messages: the index is live, the raw file a download.
     pub index_ahead: usize,
-    /// Messages in the periods this run looked at and has a file for.
+    /// Positions in the period files on disk after the run, for the periods
+    /// the run looked at. A period whose index did not arrive counts with
+    /// the file it already had; a period with no file counts for nothing.
     pub messages: usize,
-    /// Of those, the messages that have no page.
+    /// Of those positions, the ones with no page.
     pub unlinked: usize,
-    /// Rejected pairings on file in those periods, from this run or earlier.
+    /// Rejected pairings in those same files, from this run or earlier.
     pub rejected: usize,
     /// Older periods left alone because of `max_periods`.
     pub periods_skipped: usize,
@@ -272,6 +274,11 @@ pub fn run_sources(
             continue;
         }
         looked_at += 1;
+        // After a stop the walk goes on only to count the older periods
+        // that a limited run leaves alone: no file is read, no request sent.
+        if report.stopped.is_some() {
+            continue;
+        }
         let period = period_of(file_path);
         let stop = update_period(
             &period,
@@ -283,7 +290,9 @@ pub fn run_sources(
         )?;
         if stop.is_some() {
             report.stopped = stop;
-            break;
+            if opts.max_periods.is_none() {
+                break;
+            }
         }
     }
     report.not_found = budget.not_found;
@@ -317,8 +326,14 @@ fn update_period(
                 // No index, so nothing is known about this period: its file
                 // is left as it is, or left unwritten, and the index is
                 // asked for again on a later run.
-                Asked::Failed => return Ok(None),
-                Asked::Stop(reason) => return Ok(Some(reason)),
+                Asked::Failed => {
+                    tally(report, stale.as_ref());
+                    return Ok(None);
+                }
+                Asked::Stop(reason) => {
+                    tally(report, stale.as_ref());
+                    return Ok(Some(reason));
+                }
             };
             report.periods_indexed += 1;
             if index.len() != raw_messages.len() {
@@ -427,10 +442,17 @@ fn update_period(
         save_period(out_dir, &current)?;
     }
     // What the period's file says now, whether or not this run changed it.
-    report.messages += current.articles.len();
-    report.unlinked += current.articles.iter().filter(|a| a.is_none()).count();
-    report.rejected += current.rejected.len();
+    tally(report, Some(&current));
     Ok(stop)
+}
+
+/// Adds what a period's file on disk says to the report's totals.
+fn tally(report: &mut SourcesReport, on_file: Option<&PeriodSources>) {
+    if let Some(file) = on_file {
+        report.messages += file.articles.len();
+        report.unlinked += file.articles.iter().filter(|a| a.is_none()).count();
+        report.rejected += file.rejected.len();
+    }
 }
 
 fn save_period(out_dir: &Path, period: &PeriodSources) -> Result<()> {

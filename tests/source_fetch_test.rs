@@ -1448,3 +1448,150 @@ fn test_a_period_whose_index_did_not_arrive_is_not_counted() {
     assert_eq!(report.messages, 0);
     assert_eq!(report.unlinked, 0);
 }
+
+/// Four periods with messages, the newest of which has three whose pages
+/// the source does not have. Only the newest period's index is served.
+fn four_periods_the_newest_cannot_be_finished(raw: &Path) -> FakeFetcher {
+    let mut source = FakeFetcher::new();
+    for period in ["2025-December", "2026-January", "2026-February"] {
+        fs::write(
+            raw.join(format!("{period}.mbox")),
+            raw_message(1, "[Rd] Topic", "Plain text."),
+        )
+        .unwrap();
+    }
+    let mbox = raw_message(1, "[Rd] Topic A", "A na?ve question.")
+        + &raw_message(2, "[Rd] Topic B", "A na?ve question.")
+        + &raw_message(3, "[Rd] Topic C", "A na?ve question.");
+    fs::write(raw.join("2026-March.mbox"), mbox).unwrap();
+    source.serve(
+        "2026-March/date.html",
+        &index_page(&[
+            ("000101", "[Rd] Topic A"),
+            ("000102", "[Rd] Topic B"),
+            ("000103", "[Rd] Topic C"),
+        ]),
+    );
+    source
+}
+
+#[test]
+fn test_older_periods_are_counted_when_a_limited_run_runs_out_of_budget() {
+    let raw = scratch_dir("skipped-budget-raw");
+    let out = scratch_dir("skipped-budget-out");
+    let mut source = four_periods_the_newest_cannot_be_finished(&raw);
+    let opts = SourcesOptions {
+        max_requests: 1,
+        max_periods: Some(2),
+        ..SourcesOptions::default()
+    };
+
+    let report = run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+
+    assert_eq!(
+        report.stopped,
+        Some("request budget of 1 spent".to_string())
+    );
+    assert_eq!(report.periods_skipped, 2);
+    assert_eq!(source.asked_paths(), ["2026-March/date.html"]);
+}
+
+#[test]
+fn test_older_periods_are_counted_when_a_limited_run_gives_up_on_the_source() {
+    let raw = scratch_dir("skipped-failures-raw");
+    let out = scratch_dir("skipped-failures-out");
+    let mut source = four_periods_the_newest_cannot_be_finished(&raw);
+    let opts = SourcesOptions {
+        max_periods: Some(2),
+        ..SourcesOptions::default()
+    };
+
+    let report = run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+
+    assert_eq!(
+        report.stopped,
+        Some("3 requests in a row failed".to_string())
+    );
+    assert_eq!(report.periods_skipped, 2);
+    assert_eq!(
+        source.asked_paths(),
+        [
+            "2026-March/date.html",
+            "2026-March/000101.html",
+            "2026-March/000102.html",
+            "2026-March/000103.html"
+        ]
+    );
+}
+
+#[test]
+fn test_an_empty_newest_file_takes_no_slot_when_a_limited_run_stops() {
+    let raw = scratch_dir("skipped-empty-raw");
+    let out = scratch_dir("skipped-empty-out");
+    let mut source = four_periods_the_newest_cannot_be_finished(&raw);
+    fs::remove_file(raw.join("2025-December.mbox")).unwrap();
+    fs::write(raw.join("2026-April.mbox"), "").unwrap();
+    let opts = SourcesOptions {
+        max_requests: 1,
+        max_periods: Some(2),
+        ..SourcesOptions::default()
+    };
+
+    let report = run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+
+    assert!(report.stopped.is_some());
+    // March and February are the window; only January is older.
+    assert_eq!(report.periods_skipped, 1);
+    assert_eq!(source.asked_paths(), ["2026-March/date.html"]);
+}
+
+#[test]
+fn test_a_period_on_file_is_counted_when_its_index_does_not_arrive() {
+    let raw = scratch_dir("onfile-raw");
+    let out = scratch_dir("onfile-out");
+    // January: two messages, one page. February: one message, linked.
+    fs::write(
+        raw.join("2026-January.mbox"),
+        raw_message(1, "[Rd] Topic A", "Plain text.")
+            + &raw_message(2, "[Rd] Topic B", "Plain text."),
+    )
+    .unwrap();
+    let feb = raw_message(1, "[Rd] Topic C", "Plain text.");
+    fs::write(raw.join("2026-February.mbox"), &feb).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-January/date.html",
+        &index_page(&[("000101", "[Rd] Topic A")]),
+    );
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000201", "[Rd] Topic C")]),
+    );
+    let report = run(&raw, &out, &mut source);
+    assert_eq!((report.messages, report.unlinked), (3, 1));
+
+    // February's raw file grows and its index is not found.
+    let grown = feb + &raw_message(2, "[Rd] Topic D", "Plain text.");
+    fs::write(raw.join("2026-February.mbox"), &grown).unwrap();
+    let mut source = FakeFetcher::new();
+    let report = run(&raw, &out, &mut source);
+    assert_eq!(source.asked_paths(), ["2026-February/date.html"]);
+    assert_eq!(report.not_found, 1);
+    assert_eq!(report.periods_indexed, 0);
+    // The file on disk still has one position for February.
+    assert_eq!(report.messages, 3);
+    assert_eq!(report.unlinked, 1);
+
+    // The same when the budget runs out at the index. January is not looked
+    // at, since the run stops first.
+    let mut source = FakeFetcher::new();
+    let opts = SourcesOptions {
+        max_requests: 0,
+        ..SourcesOptions::default()
+    };
+    let report = run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+    assert!(source.asked.is_empty());
+    assert!(report.stopped.is_some());
+    assert_eq!(report.messages, 1);
+    assert_eq!(report.unlinked, 0);
+}

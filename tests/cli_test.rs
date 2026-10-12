@@ -261,3 +261,39 @@ fn test_sources_with_max_periods_does_not_claim_every_period_is_up_to_date() {
     std::fs::remove_dir_all(&raw).unwrap();
     std::fs::remove_dir_all(&out).unwrap();
 }
+
+#[test]
+fn test_sources_prints_each_count_on_its_own_line() {
+    let raw = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/raw");
+    let out = std::env::temp_dir().join(format!("rmail-parser-cli-{}-counts", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).unwrap();
+    // The fixture's period as a file with different numbers on every line:
+    // four positions, two without a page, one rejected pairing. The raw file
+    // has four messages, so the run asks for nothing and the budget of zero
+    // is not spent.
+    let written = "{\n  \"period\": \"2026-October\",\n  \"articles\": [\n    \"084714\",\n    null,\n    null,\n    \"084717\"\n  ],\n  \"fixes\": {},\n  \"rejected\": {\n    \"084716\": \"msg-084799@example.org\"\n  }\n}\n";
+    std::fs::write(out.join("2026-October.json"), written).unwrap();
+
+    let run = rmail_parser(&[
+        "sources",
+        "--raw",
+        raw.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+        "--base-url",
+        "https://lists.example.org/pipermail/r-devel/",
+        "--max-requests",
+        "0",
+    ]);
+
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    for line in [
+        "Messages in periods looked at: 4\n",
+        "Messages without a link:       2\n",
+        "Rejected pairings on file:     1\n",
+    ] {
+        assert!(stderr.contains(line), "{line:?} missing from:\n{stderr}");
+    }
+    std::fs::remove_dir_all(&out).unwrap();
+}

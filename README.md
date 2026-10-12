@@ -72,11 +72,31 @@ For each period, newest first, the command fetches `<period>/date.html` when the
 
 `articles[i]` is the page number of the i-th message in the raw file, or `null` where no page could be matched. `fixes` has an entry for every page that has been fetched: one character for each `?` in that message's body, in order, which is either the character to restore or `?` to leave it alone. An empty string means the page had nothing to restore.
 
-`rejected` has an entry for every page that was fetched and named another Message-ID than the message it had been paired with: the page number, and the Message-ID the page names. That message loses its link, and when the period is indexed again the page is linked only to the message it names. A file without the `rejected` field was written by a version before 0.10.0 and is refused by both commands: delete it and let `sources` write it again.
+`rejected` has an entry for every page that was fetched and named another Message-ID than the message it had been paired with: the page number, and the Message-ID the page names. That message loses its link, and when the period is indexed again the page is linked only to the message it names. A file without the `rejected` field was written by a version before 0.10.0. `parse --sources` refuses it, and so does `sources` when it reads it; a run limited by `--max-periods` does not read the files of older periods. Delete such a file and let `sources` write it again.
 
 With `--max-periods 2` the command looks at the two newest periods that have messages and leaves every older one exactly as it is. A daily run passes it, so that it never walks into a list's history; a run without it takes every period, newest first, until its budget is spent.
 
-When it ends the command prints what it did: periods indexed, pages fetched, characters restored and left, pages that named another message, requests that failed, answers that were "not found", and indexes that listed more pages than the raw file has messages. For the periods it looked at it also prints how many messages there are, how many have no link, and how many rejected pairings are on file.
+When it ends the command prints what it did, to stderr, one line each in this order:
+
+```
+Periods indexed:               N
+Pages fetched:                 N
+Characters restored:           N
+? left as they were:           N
+Pages naming another message:  N
+Characters beyond U+FFFF seen: N
+Requests that failed:          N
+Pages the source did not have: N
+Indexes ahead of the raw file: N
+Messages in periods looked at: N
+Messages without a link:       N
+Rejected pairings on file:     N
+Older periods not looked at:   N
+```
+
+The first nine count what this run did. The next three count what the period files say after the run, for the periods the run looked at and has a file for: positions, positions with no page, and rejected pairings. `Older periods not looked at` is 0 unless `--max-periods` is given, and a limited run that stops early still counts the periods it would have left alone. The report ends with one more line: `Stopped early: <reason>`, `Every period is up to date`, `The periods looked at are up to date` (a limited run that fetched everything it looked at) or `Not everything was fetched; the next run will ask again`.
+
+A run limited by `--max-periods` does not look at older periods again. After a closed period's raw file has been downloaded again, it may have gained or lost messages, so run `sources` once without `--max-periods` before the next limited run. Until then `parse --sources` may apply that period's old page numbers to shifted positions.
 
 The command makes one request at a time, identifies itself as `rmail-parser (+https://github.com/r-mailing-lists)`, and stops when its budget is spent or three requests in a row fail. A request the source answers with "not found" counts as a failed one, and neither is ever written down: the period or the message is left as it was and asked for again on the next run. Stopping early is not an error: the command exits 0, every file it wrote is valid, and the next run picks up what is missing. A character is restored only when the source's own page has it. Nothing is guessed.
 
