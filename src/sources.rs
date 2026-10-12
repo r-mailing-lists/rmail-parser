@@ -81,13 +81,28 @@ pub fn load(dir: &Path, period: &str) -> Result<Option<PeriodSources>> {
 
 /// Writes `<dir>/<period>.json`. The layout is fixed and the keys are sorted,
 /// so saving a period that has not changed writes the same bytes.
+///
+/// The bytes go to `<period>.json.tmp` beside it, and that file is then
+/// renamed over the period's file. A write that is cut short therefore
+/// leaves the period's file as it was, and never half written: `load`
+/// refuses a damaged file, and both commands stop on one.
 pub fn save(dir: &Path, s: &PeriodSources) -> Result<()> {
     fs::create_dir_all(dir).with_context(|| format!("Failed to create {}", dir.display()))?;
     let path = dir.join(format!("{}.json", s.period));
+    let tmp = dir.join(format!("{}.json.tmp", s.period));
     let mut json = serde_json::to_string_pretty(s).context("Failed to serialize PeriodSources")?;
     json.push('\n');
-    fs::write(&path, json).with_context(|| format!("Failed to write {}", path.display()))?;
-    Ok(())
+    let written = fs::write(&tmp, json)
+        .with_context(|| format!("Failed to write {}", tmp.display()))
+        .and_then(|()| {
+            fs::rename(&tmp, &path)
+                .with_context(|| format!("Failed to move {} to {}", tmp.display(), path.display()))
+        });
+    if written.is_err() {
+        // Whatever went wrong, the temporary file is of no use now.
+        let _ = fs::remove_file(&tmp);
+    }
+    written
 }
 
 /// True when the body has a `?` with a letter directly on both sides, which

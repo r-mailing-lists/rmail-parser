@@ -95,6 +95,84 @@ fn test_load_returns_what_save_wrote_and_saving_again_changes_nothing() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
+/// The names of everything in `dir`, sorted.
+fn names_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn test_save_replaces_the_file_that_was_there_and_leaves_no_temporary_file() {
+    let dir = scratch_dir("replace");
+    save(&dir, &sample()).unwrap();
+    assert_eq!(names_in(&dir), ["2026-October.json"]);
+
+    let mut changed = sample();
+    changed.articles.push(Some("084717".to_string()));
+    changed.fixes.remove("084715");
+    save(&dir, &changed).unwrap();
+
+    assert_eq!(load(&dir, "2026-October").unwrap().unwrap(), changed);
+    assert_eq!(names_in(&dir), ["2026-October.json"]);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_save_puts_a_new_file_in_place_and_never_writes_into_the_old_one() {
+    let dir = scratch_dir("in-place");
+    save(&dir, &sample()).unwrap();
+    let path = dir.join("2026-October.json");
+    let before = fs::read(&path).unwrap();
+    // A second name for the file as it is now. Writing into the file would
+    // show under this name too. Putting a new file in its place does not,
+    // so at no moment is the period's file half written.
+    let old = dir.join("as-it-was");
+    fs::hard_link(&path, &old).unwrap();
+
+    let mut changed = sample();
+    changed.articles.push(None);
+    save(&dir, &changed).unwrap();
+
+    assert!(before == fs::read(&old).unwrap());
+    assert_eq!(load(&dir, "2026-October").unwrap().unwrap(), changed);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_save_that_cannot_write_leaves_the_file_as_it_was() {
+    let dir = scratch_dir("cannot-write");
+    save(&dir, &sample()).unwrap();
+    let before = fs::read(dir.join("2026-October.json")).unwrap();
+    // A directory where the temporary file goes, so writing it fails.
+    fs::create_dir(dir.join("2026-October.json.tmp")).unwrap();
+
+    let mut changed = sample();
+    changed.articles.push(None);
+    let err = save(&dir, &changed).unwrap_err();
+
+    assert!(format!("{:#}", err).contains("2026-October.json"));
+    assert!(before == fs::read(dir.join("2026-October.json")).unwrap());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn test_save_that_cannot_put_the_file_in_place_leaves_no_temporary_file() {
+    let dir = scratch_dir("cannot-rename");
+    // A directory where the period's file goes: the temporary file is
+    // written, and then cannot be renamed over it.
+    fs::create_dir(dir.join("2026-October.json")).unwrap();
+
+    let err = save(&dir, &sample()).unwrap_err();
+
+    assert!(format!("{:#}", err).contains("2026-October.json"));
+    assert_eq!(names_in(&dir), ["2026-October.json"]);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn test_load_of_a_period_without_a_file_is_none() {
     let dir = scratch_dir("missing");
