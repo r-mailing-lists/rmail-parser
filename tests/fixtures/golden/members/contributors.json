@@ -1,0 +1,35 @@
+[
+  {
+    "name": "Lee Vane",
+    "slug": "lee-vane",
+    "emailHash": "300647a7d0e225928dd9e8db6d8ae7be33718d452d1bfed181852e7b54d98389",
+    "messageCount": 1,
+    "firstDate": "2026-03-03T09:05:00Z",
+    "lastDate": "2026-03-03T09:05:00Z",
+    "yearlyActivity": {
+      "2026": 1
+    }
+  },
+  {
+    "name": "jane.roe at uni-example.edu",
+    "slug": "jane-roe-at-uni-example-edu",
+    "emailHash": "4767bde5b58adf52e7677cc95211d11df090aabc3926a901c8f3119e2ec4d7be",
+    "messageCount": 1,
+    "firstDate": "2026-03-02T10:15:00Z",
+    "lastDate": "2026-03-02T10:15:00Z",
+    "yearlyActivity": {
+      "2026": 1
+    }
+  },
+  {
+    "name": "Mark Poe",
+    "slug": "mark-poe",
+    "emailHash": "aa674cdb29fabcc5fa20c05d13e7e2512d9fbf15b6b8259420fd6dc6e39c450f",
+    "messageCount": 1,
+    "firstDate": "2026-03-02T14:40:00Z",
+    "lastDate": "2026-03-02T14:40:00Z",
+    "yearlyActivity": {
+      "2026": 1
+    }
+  }
+]

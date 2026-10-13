@@ -1,0 +1,82 @@
+{
+  "list": "r-sig-phylo",
+  "description": "",
+  "month": "2026-03",
+  "messages": [
+    {
+      "id": "msg-b86b4b629605",
+      "message_id": "<20260302101500.1234@mail.uni-example.edu>",
+      "from_name": "jane.roe at uni-example.edu",
+      "from_email_hash": "4767bde5b58adf52e7677cc95211d11df090aabc3926a901c8f3119e2ec4d7be",
+      "date": "2026-03-02T10:15:00Z",
+      "subject": "[R-sig-phylo] Rooting a tree with ape",
+      "subject_clean": "Rooting a tree with ape",
+      "in_reply_to": null,
+      "references": [],
+      "body_plain": "Dear list,\n\nHow do I root a tree with ape? Please reply to the list or to me\n(jane.roe at uni-example.edu). My notes are available at www.example.org/phylo\nand the code at github.com/example/rooting.\n\nJane\n\n_______________________________________________\nR-sig-phylo mailing list - R-sig-phylo at r-project.org\nhttps://stat.ethz.ch/mailman/listinfo/r-sig-phylo\nSearchable archive at http://www.mail-archive.com/r-sig-phylo at r-project.org/",
+      "body_snippet": "Dear list,\n\nHow do I root a tree with ape? Please reply to the list or to me\n(jane.roe at uni-example.edu). My notes are available at www.example.org/phylo\nand the code at github.com/example/rooting.\n",
+      "thread_id": "thread-b86b4b629605",
+      "thread_depth": 0,
+      "month": "2026-03"
+    },
+    {
+      "id": "msg-9fe9e8006ead",
+      "message_id": "<CAF8xyz01@mail.inst-example.org>",
+      "from_name": "Mark Poe",
+      "from_email_hash": "aa674cdb29fabcc5fa20c05d13e7e2512d9fbf15b6b8259420fd6dc6e39c450f",
+      "date": "2026-03-02T14:40:00Z",
+      "subject": "Re: [R-sig-phylo] Rooting a tree with ape",
+      "subject_clean": "Rooting a tree with ape",
+      "in_reply_to": "<20260302101500.1234@mail.uni-example.edu>",
+      "references": [
+        "<20260302101500.1234@mail.uni-example.edu>"
+      ],
+      "body_plain": "On Mon, 2 Mar 2026, jane.roe at uni-example.edu wrote:\n> How do I root a tree with ape? Please reply to the list or to me\n> (jane.roe at uni-example.edu).\n\nUse root() with an outgroup. Lee Vane <lee.vane@lab-example.net> wrote\nabout this last year. I have moved: m@rk@poe @end|ng |rom |n@t-ex@mp|e@org\nis my address now.\n\nMark\n\n_______________________________________________\nR-@|g-phy|o m@|||ng ||@t - R-@|g-phy|o @end|ng |rom r-project@org\nhttps://stat.ethz.ch/mailman/listinfo/r-sig-phylo",
+      "body_snippet": "On Mon, 2 Mar 2026, jane.roe at uni-example.edu wrote:\n> How do I root a tree with ape? Please reply to the list or to me\n> (jane.roe at uni-example.edu).\n\nUse root() with an outgroup. Lee Vane <lee.v",
+      "thread_id": "thread-b86b4b629605",
+      "thread_depth": 1,
+      "month": "2026-03"
+    },
+    {
+      "id": "msg-047f76d383e2",
+      "message_id": "<m3.20260303@lists.example.org>",
+      "from_name": "Lee Vane",
+      "from_email_hash": "300647a7d0e225928dd9e8db6d8ae7be33718d452d1bfed181852e7b54d98389",
+      "date": "2026-03-03T09:05:00Z",
+      "subject": "[R-sig-phylo] Workshop: write to lee.vane at lab-example.net",
+      "subject_clean": "Workshop: write to lee.vane at lab-example.net",
+      "in_reply_to": null,
+      "references": [],
+      "body_plain": "Dear all,\n\nJ?rg M?ller (j?rg.m?ller at uni-example.de) and I are planning a workshop\nat the Universit?t in June. Write to either of us to take part.\n\nLee",
+      "body_snippet": "Dear all,\n\nJ?rg M?ller (j?rg.m?ller at uni-example.de) and I are planning a workshop\nat the Universit?t in June. Write to either of us to take part.\n\nLee",
+      "thread_id": "thread-047f76d383e2",
+      "thread_depth": 0,
+      "month": "2026-03"
+    }
+  ],
+  "threads": [
+    {
+      "id": "thread-b86b4b629605",
+      "subject": "Rooting a tree with ape",
+      "message_count": 2,
+      "participants": [
+        "Mark Poe",
+        "jane.roe at uni-example.edu"
+      ],
+      "started": "2026-03-02T10:15:00Z",
+      "last_reply": "2026-03-02T14:40:00Z",
+      "root_message_id": "msg-b86b4b629605"
+    },
+    {
+      "id": "thread-047f76d383e2",
+      "subject": "Workshop: write to lee.vane at lab-example.net",
+      "message_count": 1,
+      "participants": [
+        "Lee Vane"
+      ],
+      "started": "2026-03-03T09:05:00Z",
+      "last_reply": "2026-03-03T09:05:00Z",
+      "root_message_id": "msg-047f76d383e2"
+    }
+  ]
+}

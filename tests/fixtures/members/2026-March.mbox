@@ -1,0 +1,53 @@
+From jane.roe at uni-example.edu  Mon Mar  2 10:15:00 2026
+From: jane.roe at uni-example.edu
+Date: Mon, 2 Mar 2026 10:15:00 +0000
+Subject: [R-sig-phylo] Rooting a tree with ape
+Message-ID: <20260302101500.1234@mail.uni-example.edu>
+
+Dear list,
+
+How do I root a tree with ape? Please reply to the list or to me
+(jane.roe at uni-example.edu). My notes are available at www.example.org/phylo
+and the code at github.com/example/rooting.
+
+Jane
+
+_______________________________________________
+R-sig-phylo mailing list - R-sig-phylo at r-project.org
+https://stat.ethz.ch/mailman/listinfo/r-sig-phylo
+Searchable archive at http://www.mail-archive.com/r-sig-phylo at r-project.org/
+
+From m@rk@poe @end|ng |rom |n@t-ex@mp|e@org  Mon Mar  2 15:40:00 2026
+From: m@rk@poe @end|ng |rom |n@t-ex@mp|e@org (Mark Poe)
+Date: Mon, 2 Mar 2026 15:40:00 +0100
+Subject: Re: [R-sig-phylo] Rooting a tree with ape
+In-Reply-To: <20260302101500.1234@mail.uni-example.edu>
+References: <20260302101500.1234@mail.uni-example.edu>
+Message-ID: <CAF8xyz01@mail.inst-example.org>
+
+On Mon, 2 Mar 2026, jane.roe at uni-example.edu wrote:
+> How do I root a tree with ape? Please reply to the list or to me
+> (jane.roe at uni-example.edu).
+
+Use root() with an outgroup. Lee Vane <lee.vane@lab-example.net> wrote
+about this last year. I have moved: m@rk@poe @end|ng |rom |n@t-ex@mp|e@org
+is my address now.
+
+Mark
+
+_______________________________________________
+R-@|g-phy|o m@|||ng ||@t - R-@|g-phy|o @end|ng |rom r-project@org
+https://stat.ethz.ch/mailman/listinfo/r-sig-phylo
+
+From lee.vane at lab-example.net  Tue Mar  3 09:05:00 2026
+From: Lee Vane <lee.vane at lab-example.net>
+Date: Tue, 3 Mar 2026 09:05:00 +0000
+Subject: [R-sig-phylo] Workshop: write to lee.vane at lab-example.net
+Message-ID: <m3.20260303@lists.example.org>
+
+Dear all,
+
+J?rg M?ller (j?rg.m?ller at uni-example.de) and I are planning a workshop
+at the Universit?t in June. Write to either of us to take part.
+
+Lee
