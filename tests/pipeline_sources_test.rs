@@ -32,6 +32,7 @@ fn parse_month(raw: &Path, sources_dir: &Path, name: &str, month: &str) -> Vec<M
         false,
         None,
         Some((sources_dir, BASE)),
+        false,
     )
     .unwrap();
     let json = fs::read_to_string(output.join(format!("{month}.json"))).unwrap();
@@ -149,7 +150,7 @@ fn test_parse_with_an_empty_sources_directory_writes_what_it_writes_without_one(
     let raw = fixture_path("raw/2026-October.mbox");
     let plain = scratch_dir("empty-plain");
     let empty = scratch_dir("empty-with");
-    run_parse(&raw, &plain, "r-devel", true, None, None).unwrap();
+    run_parse(&raw, &plain, "r-devel", true, None, None, false).unwrap();
     run_parse(
         &raw,
         &empty,
@@ -157,6 +158,7 @@ fn test_parse_with_an_empty_sources_directory_writes_what_it_writes_without_one(
         true,
         None,
         Some((&scratch_dir("empty-sources"), BASE)),
+        false,
     )
     .unwrap();
 
@@ -375,6 +377,7 @@ fn test_a_damaged_sources_file_stops_the_parse_and_names_the_file() {
         false,
         None,
         Some((&sources_dir, BASE)),
+        false,
     )
     .unwrap_err();
     assert!(format!("{:#}", err).contains("2026-February.json"));
@@ -404,6 +407,7 @@ fn test_a_sources_file_from_before_rejected_pairings_stops_the_parse_and_names_t
         false,
         None,
         Some((&sources_dir, BASE)),
+        false,
     )
     .unwrap_err();
 

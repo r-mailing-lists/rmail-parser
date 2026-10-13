@@ -1,7 +1,9 @@
 //! What `parse --hide-addresses` does to a text, a subject and a display
 //! name. Each table row is an input and what it must become.
 
-use std::time::{Duration, Instant};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 use rmail_parser::addresses::{hide_in_message, hide_in_name, hide_in_text};
 use rmail_parser::message::parse_message;
@@ -444,19 +446,18 @@ fn what_may_be_an_address_is_hidden() {
 /// One megabyte.
 const MEGABYTE: usize = 1 << 20;
 
-/// Cleans `text` and fails if that took a second. A scan that is linear in
-/// the length of the text takes a few milliseconds for a megabyte; one that
-/// goes back over the line at every separator takes minutes.
+/// Cleans `text`, and fails if that has not ended after a second. A scan
+/// that is linear in the length of the text takes a fraction of a second
+/// for a megabyte, and one that goes back over the line at every separator
+/// takes minutes. The work is done on a thread of its own, so that such a
+/// scan fails the test after that second and does not hold up the run.
 fn hide_in_time(text: &str) -> String {
-    let start = Instant::now();
-    let got = hide_in_text(text, LIST);
-    let took = start.elapsed();
-    assert!(
-        took < Duration::from_secs(1),
-        "{} bytes took {took:?}",
-        text.len()
-    );
-    got
+    let (done, result) = mpsc::channel();
+    let owned = text.to_string();
+    thread::spawn(move || done.send(hide_in_text(&owned, LIST)));
+    result
+        .recv_timeout(Duration::from_secs(1))
+        .unwrap_or_else(|_| panic!("{} bytes took more than a second", text.len()))
 }
 
 #[test]
@@ -650,6 +651,52 @@ fn hiding_in_a_message_cleans_its_name_subject_and_text() {
 }
 
 #[test]
+fn hiding_in_a_message_keeps_the_cleaned_subject_the_subject_without_its_prefix() {
+    for (subject, want, want_clean) in [
+        (
+            "Re: [R-sig-phylo] jane at uni.edu wrote",
+            "Re: [R-sig-phylo] [address hidden] wrote",
+            "[address hidden] wrote",
+        ),
+        // An address directly after the prefix, with no blank between.
+        (
+            "Re:jane at uni.edu",
+            "Re:[address hidden]",
+            "[address hidden]",
+        ),
+        ("[R]@uni.edu", "[R][address hidden]", "[address hidden]"),
+        (
+            "Fwd: [R] j@ne @end|ng |rom un|@edu",
+            "Fwd: [R] [address hidden]",
+            "[address hidden]",
+        ),
+        // What stays in the one stays in the other.
+        (
+            "Re: [R-sig-phylo] r-sig-phylo at r-project.org is down",
+            "Re: [R-sig-phylo] r-sig-phylo at r-project.org is down",
+            "r-sig-phylo at r-project.org is down",
+        ),
+        (
+            "Fwd: [R] nothing to hide",
+            "Fwd: [R] nothing to hide",
+            "nothing to hide",
+        ),
+    ] {
+        let raw = message_with_addresses().replace(
+            "Re: [R-sig-phylo] Mail from mark.poe at inst-example.org",
+            subject,
+        );
+        let mut msg = parse_message(&raw).unwrap();
+        assert_eq!(msg.subject, subject);
+
+        hide_in_message(&mut msg, LIST);
+
+        assert_eq!(msg.subject, want);
+        assert_eq!(msg.subject_clean, want_clean, "for {subject:?}");
+    }
+}
+
+#[test]
 fn hiding_in_a_message_cuts_the_snippet_from_the_cleaned_text() {
     let mut msg = parse_message(&message_with_addresses()).unwrap();
 
@@ -693,4 +740,79 @@ fn hiding_in_a_message_keeps_what_identifies_it() {
     assert_eq!(hidden.source_url, plain.source_url);
     // And it did do its work.
     assert_ne!(hidden.body_plain, plain.body_plain);
+}
+
+/// The same numbers on every run, so that a failure can be run again.
+struct Numbers(u64);
+
+impl Numbers {
+    fn below(&mut self, limit: usize) -> usize {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        (self.0 % limit as u64) as usize
+    }
+}
+
+#[test]
+fn any_text_is_cleaned_on_character_boundaries_and_gains_nothing_but_markers() {
+    // What makes and what breaks an address, with characters of two, three
+    // and four bytes among it. A cut inside one of those is a panic.
+    const PIECES: [&str; 36] = [
+        " at ",
+        "@",
+        "@end|ng |rom",
+        " @end|ng |rom ",
+        " ",
+        "\n",
+        ".",
+        "..",
+        "-",
+        "_",
+        "?",
+        "|",
+        "'",
+        "<",
+        ">",
+        "(",
+        ")",
+        "/",
+        ":",
+        ",",
+        "jane",
+        "uni",
+        ".edu",
+        "www.",
+        "r-",
+        "bioc",
+        "r-project.org",
+        "stat.math.ethz.ch",
+        "r-sig-phylo",
+        "is",
+        "5",
+        "\u{e9}",
+        "\u{a0}",
+        "\u{65e5}",
+        "\u{2019}",
+        "\u{1f600}",
+    ];
+    let mut numbers = Numbers(0x9E37_79B9_7F4A_7C15);
+    for _ in 0..20_000 {
+        let text: String = (0..1 + numbers.below(12))
+            .map(|_| PIECES[numbers.below(PIECES.len())])
+            .collect();
+
+        let cleaned = hide_in_text(&text, LIST);
+
+        // What is left between the markers is the text's own, in its order.
+        let mut rest = text.as_str();
+        for kept in cleaned.split(HIDDEN) {
+            let at = rest
+                .find(kept)
+                .unwrap_or_else(|| panic!("{text:?} became {cleaned:?}"));
+            rest = &rest[at + kept.len()..];
+        }
+        // A name is cleaned by other code, on the same boundaries.
+        hide_in_name(&text, LIST);
+    }
 }

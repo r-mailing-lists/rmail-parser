@@ -24,7 +24,7 @@
 
 use std::ops::Range;
 
-use crate::message::{clean_subject, make_snippet, Message};
+use crate::message::{make_snippet, Message};
 
 /// What an address is replaced with.
 pub const HIDDEN: &str = "[address hidden]";
@@ -106,7 +106,7 @@ pub fn hide_in_text(text: &str, list: &str) -> String {
     // Everything before `copied` is already in `out`.
     let mut copied = 0;
     let mut from = 0;
-    while let Some(found) = next_address(text, from, copied) {
+    while let Some(found) = next_address(text, from) {
         if stays(text, &found, list) {
             // Only the separator is passed over. What follows it is looked
             // at again, in case it is the mailbox name of a next address.
@@ -133,7 +133,11 @@ pub fn hide_in_text(text: &str, list: &str) -> String {
 pub fn hide_in_message(msg: &mut Message, list: &str) {
     msg.from_name = hide_in_name(&msg.from_name, list);
     msg.subject = hide_in_text(&msg.subject, list);
-    msg.subject_clean = clean_subject(&msg.subject);
+    // The cleaned subject is the subject without what stands before its
+    // first word, `Re:` and `[R]`, so an address is hidden in it as it is
+    // in the subject. Cleaning the field itself does not rest on that, and
+    // spares `clean_subject`, which compiles its pattern on every call.
+    msg.subject_clean = hide_in_text(&msg.subject_clean, list);
     msg.body_plain = hide_in_text(&msg.body_plain, list);
     msg.body_snippet = make_snippet(&msg.body_plain);
 }
@@ -150,7 +154,7 @@ pub fn hide_in_name(name: &str, list: &str) -> String {
     // A `From:` line may leave blanks, quotation marks or brackets around
     // the address. A lost character at either end belongs to it.
     let whole = name.trim_matches(|c: char| !(c.is_alphanumeric() || is_lost(c)));
-    if let Some(found) = next_address(whole, 0, 0) {
+    if let Some(found) = next_address(whole, 0) {
         if found.hidden == (0..whole.len()) {
             let mailbox = &whole[found.mailbox];
             let shown: String = match found.form {
@@ -172,15 +176,16 @@ pub fn hide_in_name(name: &str, list: &str) -> String {
 }
 
 /// The first address whose separator is at or after `from`. Its mailbox
-/// name does not reach back before `floor`.
-fn next_address(text: &str, from: usize, floor: usize) -> Option<Address> {
+/// name does not reach back before `from` either: what is before `from` is
+/// an address that was hidden, or the separator of one that stays.
+fn next_address(text: &str, from: usize) -> Option<Address> {
     let bytes = text.as_bytes();
     // The separators are ASCII, so looking for them byte by byte never
     // lands inside a longer character.
     (from..bytes.len()).find_map(|at| match bytes[at] {
-        b' ' if text[at..].starts_with(AT) => at_form(text, at, floor),
-        b'@' if text[at..].starts_with(LOSSY) => lossy_form(text, at, floor),
-        b'@' => sign_form(text, at, floor),
+        b' ' if text[at..].starts_with(AT) => at_form(text, at, from),
+        b'@' if text[at..].starts_with(LOSSY) => lossy_form(text, at, from),
+        b'@' => sign_form(text, at, from),
         _ => None,
     })
 }

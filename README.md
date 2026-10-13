@@ -109,6 +109,33 @@ rmail-parser parse --input raw/ --output processed/ --list r-devel \
 
 `--sources` and `--base-url` must be given together. Each message with a known page gains a `source_url` of the form `<base-url>/<period>/<number>.html`, and its body and snippet carry the restored characters. Without the two flags, or for a raw file that has no `sources/` file, the output is what it has always been and has no `source_url` field.
 
+## Hiding addresses
+
+```bash
+rmail-parser parse --input raw/ --output processed/ --list r-sig-phylo --hide-addresses
+```
+
+`--hide-addresses` is for a list whose archive only its members can read: its messages may be published, the addresses in them may not. With the flag, no file a run writes holds a mailbox address. Without it, the output is what it has always been.
+
+An address is hidden in each of the three forms these archives hold: `mailbox at domain.tld`, `mailbox @end|ng |rom domain` and `mailbox@domain.tld`.
+
+| Where | With `--hide-addresses` |
+|---|---|
+| `body_plain`, `subject` | Every address becomes `[address hidden]`. Punctuation after it stays: `Jane Doe <jane at uni.edu> wrote:` becomes `Jane Doe <[address hidden]> wrote:`. |
+| `subject_clean`, `body_snippet` | Made from the cleaned subject and the cleaned text. |
+| `from_name` | A name that is an address as a whole becomes its mailbox name: `jane at uni.edu` becomes `jane`. A name with an address among other words gets `[address hidden]`. A name with nothing left to show becomes `unknown`. |
+| Threads, `contributors.json` | Made from the cleaned messages, so participants, names and slugs follow. A name taken from `--aliases` is cleaned like a `from_name`. |
+
+Three things are left as they are:
+
+- The address of an R mailing list: a mailbox name that starts with `r-`, with `bioc` or with the value of `--list`, whatever the case, at `r-project.org`, `stat.math.ethz.ch`, `lists.r-project.org` or `lists.r-forge.r-project.org`.
+- A web address written in a sentence, in the first form only: what follows ` at ` starts with `www.` or is directly followed by `/`, as in `the code at github.com/user/repo`.
+- In the first form only, what follows one of the words `look`, `looking`, `available`, `found`, `here`, `located`, `hosted`, `is`, `are`, `was`, `it`, `and`, `up`, `now`, `left`, `indexed` and `see`, which are not mailbox names.
+
+Anything else that reads as an address is hidden, also where it is none: `tree at edge.length`, which is R code, is. A hidden word is a small loss, and a published address cannot be taken back.
+
+The flag never changes `from_email_hash`, which is the hash of the real address and is what joins a person's messages across lists. Nor does it change `id`, `message_id`, `in_reply_to`, `references`, `thread_id`, the dates, `month` or `source_url`. A Message-ID has the shape of an address and is kept: replies are matched by it. With `--sources`, the text is cleaned after the source page has restored it.
+
 ## Development
 
 `cargo test` runs everything. No test touches the network: the fetching code sits behind a trait and is tested against saved pages in `tests/fixtures/`.

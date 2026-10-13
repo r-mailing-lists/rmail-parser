@@ -19,6 +19,14 @@ fn test_version_flag_prints_the_crate_version() {
 }
 
 #[test]
+fn test_parse_help_lists_hide_addresses() {
+    let run = rmail_parser(&["parse", "--help"]);
+    assert!(run.status.success());
+    let help = String::from_utf8_lossy(&run.stdout);
+    assert!(help.contains("--hide-addresses"), "{help}");
+}
+
+#[test]
 fn test_parse_refuses_sources_without_base_url() {
     let run = rmail_parser(&[
         "parse",
