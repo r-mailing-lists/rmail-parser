@@ -173,6 +173,13 @@ pub fn hide_in_text(text: &str, list: &str) -> String {
         out.push_str(HIDDEN);
         out.push_str(&text[found.kept.clone()]);
         copied = found.hidden.end;
+        // "contact me at jane.doe at uni.edu": the name of the address was
+        // read as the domain of the words before it, and its own domain is
+        // still to come. That goes too, and the one marker stands for all.
+        while let Some((kept, end)) = tail(text, copied) {
+            out.push_str(&text[kept]);
+            copied = end;
+        }
         from = copied;
     }
     out.push_str(&text[copied..]);
@@ -218,10 +225,13 @@ pub fn hide_in_name(name: &str, list: &str) -> String {
                 Form::Lossy => mailbox.chars().filter(|c| !is_lost(*c)).collect(),
                 _ => mailbox.to_string(),
             };
+            // A list's bounce address carries a member's address after one
+            // of these signs: `list-bounces+jane.doe=uni.edu`.
+            let shown = shown.split(['+', '=', '%']).next().unwrap_or_default();
             if shown.is_empty() {
                 return UNKNOWN.to_string();
             }
-            return shown;
+            return shown.to_string();
         }
     }
     let hidden = hide_in_text(name, list);
@@ -487,16 +497,41 @@ fn address(text: &str, separator: &Separator, floor: usize) -> Option<Address> {
     })
 }
 
+/// What follows a hidden address that ends at `end`, when the text goes on
+/// there with a separator and a domain: the end of that domain, and the
+/// part of the separator that stays in the text, a line end if there is one.
+fn tail(text: &str, end: usize) -> Option<(Range<usize>, usize)> {
+    let bytes = text.as_bytes();
+    // A separator may start with its blank at `end`, or after one blank,
+    // or at the line end after the blanks that end this line.
+    let line_end = end + count(&bytes[end..], |byte| matches!(byte, b' ' | b'\r'));
+    [end, end + 1, line_end].into_iter().find_map(|at| {
+        let separator = (at < bytes.len())
+            .then(|| separator_at(text, at, end))
+            .flatten()
+            .filter(|separator| separator.name_end == end)?;
+        let domain = domain_after(text, separator.domain_start, separator.form);
+        let follows = match separator.form {
+            Form::Lossy => !domain.range.is_empty(),
+            _ => domain.named,
+        };
+        follows.then(|| (separator.kept, domain.range.end))
+    })
+}
+
 /// True for an address that is left as it is.
 fn stays(text: &str, found: &Address, list: &str) -> bool {
     let lossy = found.form == Form::Lossy;
     let mailbox = &text[found.mailbox.clone()];
     let domain = &text[found.domain.clone()];
-    // An R mailing list's own address.
-    let of_a_list = LIST_PREFIXES
-        .iter()
-        .chain([&list])
-        .any(|prefix| !prefix.is_empty() && rest_after(mailbox, prefix, lossy).is_some())
+    // An R mailing list's own address. A name with one of the three signs
+    // in it is never one: a list's bounce address carries a member's
+    // address there, as in `list-bounces+jane.doe=uni.edu`.
+    let of_a_list = !mailbox.contains(['+', '=', '%'])
+        && LIST_PREFIXES
+            .iter()
+            .chain([&list])
+            .any(|prefix| !prefix.is_empty() && rest_after(mailbox, prefix, lossy).is_some())
         && LIST_DOMAINS
             .iter()
             .any(|name| rest_after(domain, name, lossy) == Some(""));
@@ -509,10 +544,22 @@ fn stays(text: &str, found: &Address, list: &str) -> bool {
     // a hidden word is a small loss, a published address cannot be taken
     // back.
     domain.starts_with("www.")
-        || text[found.domain.end..].starts_with('/')
+        || is_path(text, found.domain.end) && !mailbox.contains('.')
         || ORDINARY_WORDS
             .iter()
             .any(|word| mailbox.eq_ignore_ascii_case(word))
+}
+
+/// True when a web address goes on at `at` with a slash and its path. It
+/// does not when a separator stands in what follows the slash up to the
+/// next blank, or right after that: in `a.b at x.org/c.d at y.org` the
+/// slash parts two addresses.
+fn is_path(text: &str, at: usize) -> bool {
+    let Some(path) = text[at..].strip_prefix('/') else {
+        return false;
+    };
+    let blank = at + 1 + path.find(char::is_whitespace).unwrap_or(path.len());
+    !(at + 1..=blank).any(|at| at < text.len() && separator_at(text, at, at).is_some())
 }
 
 /// What is left of `written` after `expected` at its start, compared

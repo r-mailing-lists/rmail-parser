@@ -495,11 +495,15 @@ fn a_megabyte_without_a_blank_but_with_signs_is_cleaned_in_well_under_a_second()
     );
 
     // An address at every sign: the first takes the name before it, each
-    // later one finds its name already hidden, and the last has no domain.
-    let count = MEGABYTE / 4;
-    let line = "a.b@".repeat(count);
-    let want = HIDDEN.repeat(count - 1) + "@";
-    assert!(hide_in_time(&line) == want);
+    // later sign and domain follow a hidden address and go with it, and
+    // the last sign has no domain.
+    let line = "a.b@".repeat(MEGABYTE / 4);
+    assert_eq!(hide_in_time(&line), "[address hidden]@");
+    // The same in a link, and with a list's address that stays each time.
+    let line = "a.b%40".repeat(MEGABYTE / 6);
+    assert_eq!(hide_in_time(&line), "[address hidden]%40");
+    let line = "r-x@r-project.org/".repeat(MEGABYTE / 18);
+    assert!(hide_in_time(&line) == line);
 
     // The lossy separator over and over, and after one long name.
     let line = "@end|ng |rom".repeat(MEGABYTE / 12).replace(' ', "_");
@@ -1235,5 +1239,160 @@ fn a_display_name_in_another_spelling_becomes_its_mailbox_name() {
         ("jane.doe AT uni DOT edu", "jane.doe"),
         ("jane.doe%40uni.edu", "jane.doe"),
         ("jane.doe--at--uni.edu", "jane.doe"),
+    ]);
+}
+
+#[test]
+fn a_slash_after_the_domain_of_an_address_does_not_let_it_stay() {
+    check_text(&[
+        // A mailbox name with a full stop in it is no word of a sentence.
+        ("jane.doe at uni.edu/", "[address hidden]/"),
+        ("jane.doe at uni.edu/~jane", "[address hidden]/~jane"),
+        (
+            "a.b at x.org/c.d at y.org",
+            "[address hidden]/[address hidden]",
+        ),
+        // Nor is what stands before a slash a web address when an address
+        // follows that slash.
+        (
+            "jane at x.org/c.d at y.org",
+            "[address hidden]/[address hidden]",
+        ),
+        (
+            "mail at x.org/jane@y.org",
+            "[address hidden]/[address hidden]",
+        ),
+        (
+            "link at x.org/u?m=jane%40y.org",
+            "[address hidden]/u?m=[address hidden]",
+        ),
+        (
+            "jane at x.org/a/b at y.org",
+            "[address hidden]/a/[address hidden]",
+        ),
+        (
+            "jane at x.org/c.d at\n> y.org",
+            "[address hidden]/[address hidden]\n> ",
+        ),
+        (
+            "jane at x.org/c.d(at)y.org",
+            "[address hidden]/[address hidden]",
+        ),
+    ]);
+}
+
+#[test]
+fn a_web_address_with_a_path_still_stays() {
+    check_unchanged(&[
+        "code at github.com/user/repo",
+        "the archive at example.org/",
+        "notes at example.org/a.b/c.d",
+        "code at github.com/user/repo and more at www.example.org",
+        "code at github.com/user/repo\nand nothing else",
+    ]);
+}
+
+#[test]
+fn a_domain_that_follows_a_hidden_address_is_hidden_with_it() {
+    check_text(&[
+        (
+            "contact me at jane.doe at uni.edu",
+            "contact [address hidden]",
+        ),
+        (
+            "email me at jane.doe at uni.edu please",
+            "email [address hidden] please",
+        ),
+        ("me at j.doe at gmail.com", HIDDEN),
+        (
+            "her address: mail at jane.doe at uni.edu.",
+            "her address: [address hidden].",
+        ),
+        (
+            "reach us at jane.doe at uni.edu or at j.roe at lab.org",
+            "reach [address hidden] [address hidden]",
+        ),
+        ("me at a.b at c.d at e.f", HIDDEN),
+        // Whatever the separator that follows.
+        ("me at jane.doe@uni.edu", HIDDEN),
+        ("me at jane.doe (at) uni.edu", HIDDEN),
+        ("me at jane.doe AT uni.edu", HIDDEN),
+        ("me at jane.doe%40uni.edu", HIDDEN),
+        ("x@jane.doe at uni.edu", HIDDEN),
+        // A lossy address is read as one, so nothing of it is taken for
+        // the domain of the words before it.
+        (
+            "me at j@ne.doe @end|ng |rom un|@edu",
+            "me at [address hidden]",
+        ),
+        // Over a line end the line end stays.
+        (
+            "me at jane.doe at\n> uni.edu, thanks",
+            "[address hidden]\n> , thanks",
+        ),
+        (
+            "me at jane.doe\n> at uni.edu, thanks",
+            "[address hidden]\n> , thanks",
+        ),
+    ]);
+}
+
+#[test]
+fn what_follows_a_hidden_address_without_a_domain_stays() {
+    check_text(&[
+        ("me at jane.doe at work", "[address hidden] at work"),
+        ("jane at uni.edu at 5.30pm", "[address hidden] at 5.30pm"),
+        ("jane at uni.edu, at home", "[address hidden], at home"),
+        (
+            "jane at uni.edu and at home.example",
+            "[address hidden] and at home.example",
+        ),
+        // An address that stays has nothing hidden after it by this rule.
+        (
+            "r-help at r-project.org and at www.example.org",
+            "r-help at r-project.org and at www.example.org",
+        ),
+    ]);
+}
+
+#[test]
+fn a_bounce_address_that_holds_a_member_s_address_is_not_a_list_s() {
+    check_text(&[
+        (
+            "r-sig-phylo-bounces+jane.doe=uni.edu at r-project.org",
+            HIDDEN,
+        ),
+        (
+            "Return-Path: <r-sig-phylo-bounces+jane.doe=uni.edu@r-project.org>",
+            "Return-Path: <[address hidden]>",
+        ),
+        ("r-help+jane at r-project.org", HIDDEN),
+        ("r-help=jane at r-project.org", HIDDEN),
+        ("r-help%jane at r-project.org", HIDDEN),
+        (
+            "r-@|g-phy|o-bounce@+j@ne=un|@edu @end|ng |rom r-project@org",
+            HIDDEN,
+        ),
+    ]);
+    // A list's own bounce and request addresses hold no member's address.
+    check_unchanged(&[
+        "Sender: r-sig-phylo-bounces at r-project.org",
+        "r-sig-phylo-request at r-project.org",
+    ]);
+}
+
+#[test]
+fn a_display_name_is_cut_where_another_address_may_start_in_it() {
+    check_names(&[
+        (
+            "r-sig-phylo-bounces+jane.doe=uni.edu at r-project.org",
+            "r-sig-phylo-bounces",
+        ),
+        ("jane+lists at uni.edu", "jane"),
+        ("jane=doe@uni.edu", "jane"),
+        ("jane%relay at uni.edu", "jane"),
+        ("j@ne+||@t@ @end|ng |rom un|@edu", "jne"),
+        // And a name that is two addresses is no name.
+        ("me at jane.doe at uni.edu", "unknown"),
     ]);
 }
