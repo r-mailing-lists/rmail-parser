@@ -41,7 +41,7 @@ enum Commands {
         /// The list's archive at the source, as given to `sources` (needs --sources)
         #[arg(long, requires = "sources")]
         base_url: Option<String>,
-        /// Hide mailbox addresses in names, subjects and text (for a list whose archive only its members can read)
+        /// Hide mailbox addresses in names, subjects and text, and write Message-IDs as hashes (for a list whose archive only its members can read)
         #[arg(long, default_value_t = false)]
         hide_addresses: bool,
     },

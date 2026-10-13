@@ -3,28 +3,36 @@
 //! The archive of a list may be open to its members only, so that the
 //! addresses of those who write to it cannot be collected. Its messages may
 //! then be published, its addresses may not. This module takes them out of
-//! a message before anything is derived from it.
+//! a message before anything is derived from it, and writes the message's
+//! identifiers as hashes when the message itself is written.
 //!
-//! An address is written in three ways in these archives:
+//! An address is a mailbox name, a separator and a domain. These archives
+//! have the separator in many spellings:
 //!
-//! - `mailbox at domain.tld`, Mailman's text form, by far the commonest;
-//! - `mailbox @end|ng |rom domain`, the source's lossy form, see
-//!   [`deobfuscate_email`](crate::message::deobfuscate_email), which has
-//!   three more separators of the same kind;
-//! - `mailbox@domain.tld`.
+//! - ` at `, Mailman's text form, by far the commonest, on one line or
+//!   broken over a line end by a mail program that wrapped the line;
+//! - ` @end|ng |rom ` and three more of the same kind, the source's lossy
+//!   forms, see [`deobfuscate_email`](crate::message::deobfuscate_email);
+//! - `@`;
+//! - `%40`, in a link;
+//! - `(at)`, `--at--`, ` AT ` and the like, which people write to keep an
+//!   address from being collected.
 //!
-//! Each is found by its separator, and the name before it and the domain
-//! after it are read outwards from there. A name is read back no further
-//! than the nearest character that cannot be in one, and a blank or the
-//! separator before it always is such a character. A domain is read on in
-//! the same way. No part of a text is therefore read more than a few times,
-//! however long a line without a blank is, and the work grows with the
-//! length of the text and no faster. All of it is done on character
-//! boundaries: the separators are ASCII, and everything around them is read
-//! one character at a time.
+//! Each is found by its first character, and the name before it and the
+//! domain after it are read outwards from there. A name is read back no
+//! further than the nearest character that cannot be in one, and never
+//! past the last address that was found. A domain is read on in the same
+//! way, and ends where the next separator starts. No part of a text is
+//! therefore read more than a few times, however long a line without a
+//! blank is, and the work grows with the length of the text and no faster.
+//! All of it is done on character boundaries: every separator starts with
+//! an ASCII character, and everything around it is read one character at a
+//! time.
 
 use std::cmp::Ordering;
 use std::ops::Range;
+
+use sha2::{Digest, Sha256};
 
 use crate::message::{make_snippet, Message};
 
@@ -192,8 +200,8 @@ pub fn hide_in_text(text: &str, list: &str) -> String {
 ///
 /// What identifies the message or its sender is left as it is. The hash is
 /// that of the real address, and it is what joins a person's messages
-/// across lists. The ids, the references and the thread are what replies
-/// are matched by.
+/// across lists. The Message-ID and the references are what threads are
+/// built from: [`hide_identifiers`] sees to those once that is done.
 pub fn hide_in_message(msg: &mut Message, list: &str) {
     msg.from_name = hide_in_name(&msg.from_name, list);
     msg.subject = hide_in_text(&msg.subject, list);
@@ -204,6 +212,55 @@ pub fn hide_in_message(msg: &mut Message, list: &str) {
     msg.subject_clean = hide_in_text(&msg.subject_clean, list);
     msg.body_plain = hide_in_text(&msg.body_plain, list);
     msg.body_snippet = make_snippet(&msg.body_plain);
+}
+
+/// Writes what names a message among others, its Message-ID and the
+/// identifiers of the messages it answers, as hashes.
+///
+/// A mail program makes a Message-ID out of what it has at hand, which is
+/// often the sender's own mail domain and sometimes the sender's mailbox
+/// name, so these fields can hold an address or most of one. Each is
+/// written as `<` the first 32 hex characters of its SHA-256 `@hidden>`.
+/// Equal identifiers give equal hashes, so a reply still names the message
+/// it answers.
+///
+/// This is for the moment a message is written, and no earlier: the `id`
+/// of a message and the threads are made from the identifiers as the
+/// source has them, and must be what a run that hides nothing makes.
+pub fn hide_identifiers(msg: &mut Message) {
+    msg.message_id = hidden_identifier(&msg.message_id);
+    if let Some(parent) = &mut msg.in_reply_to {
+        *parent = hidden_identifier(parent);
+    }
+    for reference in &mut msg.references {
+        *reference = hidden_identifier(reference);
+    }
+}
+
+/// What one of those fields is written as. An `In-Reply-To:` line may name
+/// two messages, or have words beside the identifier: each `<...>` in it
+/// is hashed on its own, so that it equals the hash of the Message-ID it
+/// names, and nothing else of the line is written. A value without any
+/// `<...>` is hashed as a whole. An empty one stays as it is.
+fn hidden_identifier(value: &str) -> String {
+    let hash = |text: &str| format!("<{}@hidden>", &hex::encode(Sha256::digest(text))[..32]);
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return value.to_string();
+    }
+    let mut hashes = Vec::new();
+    let mut rest = trimmed;
+    while let Some(close) = rest.find('>') {
+        // Of doubled brackets the inner pair holds the identifier.
+        if let Some(open) = rest[..close].rfind('<') {
+            hashes.push(hash(&rest[open..=close]));
+        }
+        rest = &rest[close + 1..];
+    }
+    if hashes.is_empty() {
+        return hash(trimmed);
+    }
+    hashes.join(" ")
 }
 
 /// What `name`, the display name of a sender, may show.

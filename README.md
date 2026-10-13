@@ -115,26 +115,58 @@ rmail-parser parse --input raw/ --output processed/ --list r-devel \
 rmail-parser parse --input raw/ --output processed/ --list r-sig-phylo --hide-addresses
 ```
 
-`--hide-addresses` is for a list whose archive only its members can read: its messages may be published, the addresses in them may not. With the flag, no file a run writes holds a mailbox address. Without it, the output is what it has always been.
+`--hide-addresses` is for a list whose archive only its members can read: its messages may be published, the addresses in them may not. With the flag, `parse` hides every address it can read, in the forms listed here, and writes the identifiers of messages as hashes. What it is known to leave is listed at the end. Without the flag, the output is what it has always been.
 
-An address is hidden in each of the three forms these archives hold: `mailbox at domain.tld`, `mailbox @end|ng |rom domain` and `mailbox@domain.tld`.
+### What is read as an address
+
+A mailbox name, a separator, and a domain. The separator is one of these:
+
+| Separator | Example |
+|---|---|
+| ` at `, Mailman's text form, on one line or broken over a line end | `jane.doe at uni.edu` |
+| One of the source's four lossy forms: ` @end\|ng \|rom `, ` @ending from `, ` m@iii@g oii `, ` m@ili@g off ` | `j@ne.doe m@iii@g oii uni.edu` |
+| `@` | `jane.doe@uni.edu` |
+| `%40` in a link, and `%2540` in a link inside a link | `.../options/r-sig-phylo/jane.doe%40uni.edu` |
+| `(at)`, `[at]`, `<at>`, `{at}` and `--at--` in any letter case, with or without a blank on either side, and ` AT ` in capitals | `jane.doe (at) uni.edu` |
+
+A domain is a letter or a digit, followed somewhere by a full stop and then a letter, so `uni.edu`, `uni.edu.2` and `uni.__edu` are domains and `0.05`, `5.30pm` and `.Rprofile` are not. Between two of its parts it may be spelled ` dot `, ` DOT `, `(dot)` or `[dot]`. After a lossy separator anything counts as the domain, because that form has lost most full stops.
+
+` at ` and its spellings need a name before them and a domain after them. After `@` and `%40` a domain is hidden even when no name is read before it. A lossy separator is hidden with whatever stands on either side of it.
+
+Of an address broken over a line end, `jane.doe at` with the domain on the next line or `jane.doe` with `at uni.edu` on the next, the line end and the quote marks that start the next line stay where they are. In a link, the name ends at what a link parts its pieces with (`/ ? & = : ; |` and any escape), and the rest of the link stays.
+
+When a hidden address is directly followed by another separator and a domain, as in `contact me at jane.doe at uni.edu`, that goes with it.
+
+### What becomes of it
 
 | Where | With `--hide-addresses` |
 |---|---|
-| `body_plain`, `subject` | Every address becomes `[address hidden]`. Punctuation after it stays: `Jane Doe <jane at uni.edu> wrote:` becomes `Jane Doe <[address hidden]> wrote:`. |
-| `subject_clean`, `body_snippet` | Made from the cleaned subject and the cleaned text. |
-| `from_name` | A name that is an address as a whole becomes its mailbox name: `jane at uni.edu` becomes `jane`. A name with an address among other words gets `[address hidden]`. A name with nothing left to show becomes `unknown`. |
-| Threads, `contributors.json` | Made from the cleaned messages, so participants, names and slugs follow. A name taken from `--aliases` is cleaned like a `from_name`. |
+| `body_plain`, `subject`, `subject_clean` | Every address becomes `[address hidden]`. Punctuation around it stays: `Jane Doe <jane at uni.edu> wrote:` becomes `Jane Doe <[address hidden]> wrote:`. |
+| `body_snippet` | Cut from the cleaned text. |
+| `from_name` | A name that is an address as a whole becomes its mailbox name: `jane at uni.edu` becomes `jane`. The name is cut at the first `+`, `=` or `%`. From a lossy form it comes without the characters that form lost: `j@ne.doe` becomes `jne.doe`. A name with an address among other words gets `[address hidden]`. A name with nothing left to show becomes `unknown`. |
+| Threads, `contributors.json` | Made from the cleaned messages, so participants, names and slugs follow. A name that `parse` takes from `--aliases` is cleaned like a `from_name`. |
+| `message_id`, `in_reply_to`, `references` | Each identifier is written as `<`, the first 32 hex characters of its SHA-256, `@hidden>`. A mail program often builds a Message-ID from the sender's mail domain, and sometimes from the mailbox name. Equal identifiers give equal hashes, so a reply still names the message it answers. In a value with several `<...>` each is hashed on its own, and words beside them are not written. An empty value stays empty. |
 
-Three things are left as they are:
+With `--sources`, the text is cleaned after the source page has restored it.
 
-- The address of an R mailing list: a mailbox name that starts with `r-`, with `bioc` or with the value of `--list`, whatever the case, at `r-project.org`, `stat.math.ethz.ch`, `lists.r-project.org` or `lists.r-forge.r-project.org`.
-- A web address written in a sentence, in the first form only: what follows ` at ` starts with `www.` or is directly followed by `/`, as in `the code at github.com/user/repo`.
-- In the first form only, what follows one of the words `look`, `looking`, `available`, `found`, `here`, `located`, `hosted`, `is`, `are`, `was`, `it`, `and`, `up`, `now`, `left`, `indexed` and `see`, which are not mailbox names.
+### What is kept on purpose
 
-Anything else that reads as an address is hidden, also where it is none: `tree at edge.length`, which is R code, is. A hidden word is a small loss, and a published address cannot be taken back.
+- The address of an R mailing list, in every spelling: a mailbox name that starts with `r-`, with `bioc` or with the value of `--list`, whatever the case, at `r-project.org`, `stat.math.ethz.ch`, `lists.r-project.org` or `lists.r-forge.r-project.org`. A name with `+`, `=` or `%` in it is not one: a list's bounce address carries a member's address there.
+- A web address written in a sentence. What follows ` at ` starts with `www.`, or is directly followed by `/` as in `the code at github.com/user/repo`. The slash counts only when the word before ` at ` has no full stop in it and no separator stands in what follows the slash up to the next blank, or right after it.
+- What follows one of fifteen ordinary words and ` at `: `look`, `looking`, `available`, `found`, `here`, `located`, `hosted`, `are`, `was`, `and`, `up`, `now`, `left`, `indexed` and `see`.
 
-The flag never changes `from_email_hash`, which is the hash of the real address and is what joins a person's messages across lists. Nor does it change `id`, `message_id`, `in_reply_to`, `references`, `thread_id`, the dates, `month` or `source_url`. A Message-ID has the shape of an address and is kept: replies are matched by it. With `--sources`, the text is cleaned after the source page has restored it.
+The last two hold for the lower case ` at ` only, also when it is broken over a line end, and for none of its other spellings.
+
+Anything else that reads as an address is hidden, also where it is none: `tree at edge.length`, which is R code, and `we stare at the dot plot` are. A hidden word is a small loss, and a published address cannot be taken back.
+
+### What is not changed, and what stays visible
+
+- `id`, `thread_id` and `thread_depth` are made from the identifiers as the source has them, before those are hashed. They, the order of the messages and the shape of every thread are what a run without the flag gives. So are the dates, `month` and `source_url`.
+- `from_email_hash` is not changed. It is an unsalted SHA-256 of the sender's address as the archive spells it, and it is what joins a person's messages across lists. Whoever has an address can compute its hash and look for it.
+- A sender without a display name is shown under the mailbox name, as above.
+- `jane@localhost` and `jane at 192.168.1.1` stay: a host without a full stop and a bare IP address are not read as domains.
+- Other spellings are not read: ` at ` with a tab or with two blanks around it, an HTML entity for the sign, and any spelling not listed above.
+- The flag is on `parse` only. `stats --aliases` and `aggregate --aliases` write the names of the alias file as the file has them.
 
 ## Development
 

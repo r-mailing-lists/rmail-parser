@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use rmail_parser::addresses::{hide_in_message, hide_in_name, hide_in_text};
+use rmail_parser::addresses::{hide_identifiers, hide_in_message, hide_in_name, hide_in_text};
 use rmail_parser::message::parse_message;
 
 /// The list the tables are checked for.
@@ -441,6 +441,8 @@ fn what_may_be_an_address_is_hidden() {
         ("str(tree at edge.length)", "str([address hidden])"),
         // A domain in a sentence, after a word that is not on the list.
         ("download at cran.example.org", HIDDEN),
+        // `dot` between two words after ` at `.
+        ("we stare at the dot plot", "we [address hidden]"),
         // The plain form is never a web address.
         (
             "git clone git@github.com:user/repo.git",
@@ -1394,5 +1396,120 @@ fn a_display_name_is_cut_where_another_address_may_start_in_it() {
         ("j@ne+||@t@ @end|ng |rom un|@edu", "jne"),
         // And a name that is two addresses is no name.
         ("me at jane.doe at uni.edu", "unknown"),
+    ]);
+}
+
+#[test]
+fn hiding_identifiers_writes_each_as_the_start_of_its_hash() {
+    let mut msg = parse_message(&message_with_addresses()).unwrap();
+    assert_eq!(msg.message_id, "<b1@mail.uni-example.edu>");
+
+    hide_identifiers(&mut msg);
+
+    // The first 32 hex characters of the SHA-256 of each, brackets and all.
+    assert_eq!(msg.message_id, "<639d664ba597c93d3db502a73b740fd0@hidden>");
+    assert_eq!(
+        msg.in_reply_to.as_deref(),
+        Some("<850566b39c6908ced06582a5ae437053@hidden>")
+    );
+    assert_eq!(
+        msg.references,
+        [
+            "<fc05d455d121774fd897f94810542d54@hidden>",
+            "<850566b39c6908ced06582a5ae437053@hidden>"
+        ]
+    );
+}
+
+#[test]
+fn hiding_identifiers_changes_nothing_else_of_a_message() {
+    let plain = parse_message(&message_with_addresses()).unwrap();
+    let mut hidden = plain.clone();
+
+    hide_identifiers(&mut hidden);
+
+    // The id is made from the Message-ID when the message is parsed, and
+    // is what the threads are built on. It is not made again.
+    assert_eq!(hidden.id, plain.id);
+    assert_eq!(hidden.thread_id, plain.thread_id);
+    assert_eq!(hidden.from_email_hash, plain.from_email_hash);
+    assert_eq!(hidden.from_name, plain.from_name);
+    assert_eq!(hidden.subject, plain.subject);
+    assert_eq!(hidden.body_plain, plain.body_plain);
+    assert_eq!(hidden.date, plain.date);
+}
+
+/// What `hide_identifiers` makes of one `In-Reply-To:` value.
+fn hidden_in_reply_to(value: &str) -> String {
+    let mut msg = parse_message(&message_with_addresses()).unwrap();
+    msg.in_reply_to = Some(value.to_string());
+    hide_identifiers(&mut msg);
+    msg.in_reply_to.unwrap()
+}
+
+#[test]
+fn an_identifier_is_hashed_token_by_token() {
+    const A: &str = "<fd42a84f5894fff57e5203d69d27c92f@hidden>";
+    const C: &str = "<19478bce70cf1509f59168cb8ca50ae1@hidden>";
+    let rows = [
+        ("<a@b>", A.to_string()),
+        // Blanks around the value are not part of it.
+        ("  <a@b>\t", A.to_string()),
+        // Two identifiers, with one blank between them whatever was there.
+        ("<a@b> <c@d>", format!("{A} {C}")),
+        ("<a@b>,\n\t<c@d>", format!("{A} {C}")),
+        // Doubled brackets name the identifier inside them.
+        ("<<a@b>>", A.to_string()),
+        // What stands beside an identifier is not written at all.
+        (
+            "<a@b> (Jane Doe's message of Mon, 2 Mar 2026)",
+            A.to_string(),
+        ),
+        ("Your message of Monday <c@d>", C.to_string()),
+        // A blank inside the brackets belongs to the identifier.
+        (
+            "<a b@c>",
+            "<845d52ec583d9056ae3a50bb80701604@hidden>".to_string(),
+        ),
+        // A value without brackets is hashed as a whole.
+        (
+            " jane@uni.edu's message of Mon ",
+            "<f9d5291b8150a02c1c8acaa569ccd910@hidden>".to_string(),
+        ),
+    ];
+    for (value, want) in rows {
+        assert_eq!(hidden_in_reply_to(value), want, "for {value:?}");
+    }
+}
+
+#[test]
+fn an_empty_identifier_stays_empty() {
+    assert_eq!(hidden_in_reply_to(""), "");
+    assert_eq!(hidden_in_reply_to("  "), "  ");
+
+    let mut msg = parse_message(&message_with_addresses()).unwrap();
+    msg.message_id = String::new();
+    msg.in_reply_to = None;
+    msg.references = Vec::new();
+    hide_identifiers(&mut msg);
+    assert_eq!(msg.message_id, "");
+    assert_eq!(msg.in_reply_to, None);
+    assert!(msg.references.is_empty());
+}
+
+#[test]
+fn what_is_known_to_stay_visible_stays() {
+    check_unchanged(&[
+        // A host without a full stop, and a bare IP address.
+        "jane@localhost",
+        "jane at localhost",
+        "jane at 192.168.1.1",
+        "jane.doe@192.168.0.1",
+        // ` at ` with a tab or two blanks around it.
+        "jane.doe  at  uni.edu",
+        "jane.doe\tat\tuni.edu",
+        "jane.doe at\tuni.edu",
+        // An HTML entity for the sign.
+        "jane.doe&#64;uni.edu",
     ]);
 }

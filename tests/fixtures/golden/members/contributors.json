@@ -11,12 +11,34 @@
     }
   },
   {
+    "name": "Sam Ray",
+    "slug": "sam-ray",
+    "emailHash": "3af19641898397a127eed25ff2d6a0faef7f6d0ce84c56973ef3b061a5205df7",
+    "messageCount": 1,
+    "firstDate": "2026-03-04T08:30:00Z",
+    "lastDate": "2026-03-04T08:30:00Z",
+    "yearlyActivity": {
+      "2026": 1
+    }
+  },
+  {
     "name": "jane.roe at uni-example.edu",
     "slug": "jane-roe-at-uni-example-edu",
     "emailHash": "4767bde5b58adf52e7677cc95211d11df090aabc3926a901c8f3119e2ec4d7be",
     "messageCount": 1,
     "firstDate": "2026-03-02T10:15:00Z",
     "lastDate": "2026-03-02T10:15:00Z",
+    "yearlyActivity": {
+      "2026": 1
+    }
+  },
+  {
+    "name": "p@t.kim m@iii@g oii coi-ex@mpie.org",
+    "slug": "p-t-kim-m-iii-g-oii-coi-ex-mpie-org",
+    "emailHash": "780cbf37074896a5a8151c29fc5bc5541eaa2b0f5e4930c3a8c3c3638c865a77",
+    "messageCount": 1,
+    "firstDate": "2026-03-03T11:20:00Z",
+    "lastDate": "2026-03-03T11:20:00Z",
     "yearlyActivity": {
       "2026": 1
     }

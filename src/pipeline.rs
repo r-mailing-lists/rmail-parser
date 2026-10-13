@@ -488,7 +488,9 @@ impl StatsAccumulator {
 ///   with no `sources/` file, the output is what it always was.
 /// - If `hide_addresses` is true, no file that is written holds a mailbox
 ///   address: each message is cleaned by `addresses::hide_in_message` before
-///   anything is made from it. If it is false, nothing changes.
+///   anything is made from it, and its Message-ID and the identifiers of the
+///   messages it answers are written as hashes. If it is false, nothing
+///   changes.
 pub fn run_parse(
     input: &Path,
     output: &Path,
@@ -615,6 +617,16 @@ pub fn run_parse(
         // Accumulate stats before moving messages into the archive
         if let Some(ref mut s) = stats {
             s.accumulate(&month, &month_messages, threads.len());
+        }
+
+        // Only now, when duplicates are gone and the threads are built, are
+        // the Message-IDs written as hashes: every id and every thread was
+        // made from them as the source has them, and so is what a run that
+        // hides nothing makes.
+        if hide_addresses {
+            month_messages
+                .iter_mut()
+                .for_each(addresses::hide_identifiers);
         }
 
         let archive = MonthArchive {
