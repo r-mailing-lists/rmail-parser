@@ -1,3 +1,4 @@
+pub mod addresses;
 pub mod mbox;
 pub mod message;
 pub mod output;
