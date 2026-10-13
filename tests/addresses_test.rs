@@ -266,10 +266,8 @@ fn an_ordinary_word_before_at_is_not_a_mailbox_name() {
         "here",
         "located",
         "hosted",
-        "is",
         "are",
         "was",
-        "it",
         "and",
         "up",
         "now",
@@ -288,7 +286,7 @@ fn an_ordinary_word_before_at_is_not_a_mailbox_name() {
 fn an_ordinary_word_is_one_in_any_case_and_after_punctuation() {
     check_unchanged(&[
         "Look at example.org",
-        "It IS at example.org",
+        "It WAS at example.org",
         "(see at example.org)",
         "the mirror, now at example.org.",
     ]);
@@ -299,6 +297,14 @@ fn a_word_that_is_not_on_the_list_of_ordinary_words_is_a_mailbox_name() {
     check_text(&[
         ("me at example.org", HIDDEN),
         ("write me at example.org", "write [address hidden]"),
+        // Two short words that a department may well have as its mailbox.
+        ("is at example.org", HIDDEN),
+        (
+            "My address is at example.org",
+            "My address [address hidden]",
+        ),
+        ("it at example.org", HIDDEN),
+        ("IT at uni.edu", HIDDEN),
         // A longer word that starts or ends with an ordinary one.
         ("looks at example.org", HIDDEN),
         ("this at example.org", HIDDEN),
@@ -815,4 +821,165 @@ fn any_text_is_cleaned_on_character_boundaries_and_gains_nothing_but_markers() {
         // A name is cleaned by other code, on the same boundaries.
         hide_in_name(&text, LIST);
     }
+}
+
+/// The four separators the source writes for the `@` of an address.
+const LOSSY_SEPARATORS: [&str; 4] = ["@end|ng |rom", "@ending from", "m@iii@g oii", "m@ili@g off"];
+
+#[test]
+fn each_of_the_source_s_four_lossy_separators_marks_an_address() {
+    let rows: Vec<(String, String)> = LOSSY_SEPARATORS
+        .iter()
+        .flat_map(|separator| {
+            [
+                "ADDR",
+                "Jane Doe <ADDR> wrote:",
+                "write to me (ADDR) soon",
+                "first line\nADDR is hers\nlast line",
+                "from ADDR to ADDR",
+                "to ADDR. Then",
+                "From: ADDR (Jane Doe)",
+            ]
+            .map(|template| {
+                (
+                    template.replace("ADDR", &format!("j@ne.doe {separator} un|-ex@mple.edu")),
+                    template.replace("ADDR", HIDDEN),
+                )
+            })
+        })
+        .collect();
+    let rows: Vec<(&str, &str)> = rows
+        .iter()
+        .map(|(text, want)| (text.as_str(), want.as_str()))
+        .collect();
+    check_text(&rows);
+}
+
+#[test]
+fn each_lossy_separator_marks_an_address_with_a_part_or_a_blank_missing() {
+    check_text(&[
+        ("j@ne@ending from uni.edu", HIDDEN),
+        ("<@ending from uni.edu>", "<[address hidden]>"),
+        ("j@ne @ending from\nuni.edu", "[address hidden]\nuni.edu"),
+        ("j@nem@iii@g oii uni.edu", HIDDEN),
+        ("< m@iii@g oii uni.edu>", "< [address hidden]>"),
+        ("j@ne m@iii@g oii", HIDDEN),
+        (
+            "\"jane doe\" m@ili@g off uni.edu",
+            "\"jane doe\" [address hidden]",
+        ),
+        ("j@ne m@ili@g off <uni.edu>", "[address hidden] <uni.edu>"),
+    ]);
+    // The separators alone, and words that only start like one.
+    check_unchanged(&[
+        "@ending from",
+        " m@iii@g oii ",
+        "m@ili@g off",
+        "a m@iii@g list",
+        "the ending from here",
+    ]);
+}
+
+#[test]
+fn a_list_s_address_stays_after_each_lossy_separator() {
+    check_unchanged(&[
+        "R-@ig-phylo m@iling li@t - R-@ig-phylo @ending from r-project.org",
+        "r-heip m@iii@g oii r-project.org",
+        "r-help m@ili@g off r-project.org",
+        "r-devel @ending from @t@t.m@th.ethz.ch",
+    ]);
+    check_text(&[
+        ("j@ne.doe @ending from r-project.org", HIDDEN),
+        ("r-heip m@iii@g oii ex@mpie.org", HIDDEN),
+        ("j@ne m@ili@g off r-project.org", HIDDEN),
+    ]);
+}
+
+#[test]
+fn a_display_name_in_any_lossy_form_becomes_its_name_without_the_marks() {
+    check_names(&[
+        ("j@ne|doe @end|ng |rom un|@edu", "jnedoe"),
+        ("j@ne.doe @ending from uni.edu", "jne.doe"),
+        ("p@t.kim m@iii@g oii coi-ex@mpie.org", "pt.kim"),
+        ("\"p@t.kim m@ili@g off col-ex@mple.org\"", "pt.kim"),
+        ("@|@ m@iii@g oii coi-ex@mpie.org", "unknown"),
+        (
+            "P@t Kim p@t.kim m@iii@g oii coi-ex@mpie.org",
+            "P@t Kim [address hidden]",
+        ),
+    ]);
+}
+
+#[test]
+fn a_domain_with_digits_or_markup_in_its_last_part_is_still_a_domain() {
+    check_text(&[
+        ("jane.doe at uni.edu.2", HIDDEN),
+        ("see jane.doe at uni.edu.1", "see [address hidden]"),
+        ("jane.doe@uni.edu.2026", HIDDEN),
+        ("<jane.doe at dept.uni.__edu", "<[address hidden]"),
+        ("mailto:jane.doe at __uni.edu", "mailto:[address hidden]"),
+        ("jane.doe at uni.**edu", HIDDEN),
+        ("jane.doe@uni.__edu", HIDDEN),
+        ("jane.doe at uni.-edu", HIDDEN),
+        ("jane.doe at uni.+edu", HIDDEN),
+        // Markup after the last letter is not part of the domain.
+        ("**jane.doe at uni.edu**", "**[address hidden]**"),
+        ("__jane.doe@uni.edu__", "__[address hidden]__"),
+    ]);
+}
+
+#[test]
+fn a_number_a_time_or_a_file_name_is_still_no_domain() {
+    check_unchanged(&[
+        "significant at 0.05",
+        "fixed in version 1.5.2, or at 1.5.2",
+        "See you at 5.30pm.",
+        "Timed on one core at 2.4GHz.",
+        "placed at .Rprofile",
+        "str(tree at edge)",
+        "tested at 0.05_level",
+        "weights at 0.5*x and 0.25**2",
+        "x@0.5",
+    ]);
+}
+
+#[test]
+fn a_question_mark_belongs_to_a_domain_only_before_a_full_stop() {
+    // The list's address stays, and so does the rest of the link.
+    check_unchanged(&[
+        "<mailto:r-sig-phylo-request at r-project.org?subject=unsubscribe>",
+        "<mailto:r-sig-phylo-request@r-project.org?subject=unsubscribe>",
+        "Is it r-sig-phylo at r-project.org?",
+    ]);
+    check_text(&[
+        (
+            "<mailto:jane.doe at uni.edu?subject=hello>",
+            "<mailto:[address hidden]?subject=hello>",
+        ),
+        ("jane@uni.edu?subject=a.b", "[address hidden]?subject=a.b"),
+        (
+            "j@ne @end|ng |rom un|@edu?subject=x",
+            "[address hidden]?subject=x",
+        ),
+        // Before a full stop it is the letter the source lost.
+        ("jane at universit?t.de", HIDDEN),
+        ("jane at ?bung.de?", "[address hidden]?"),
+        ("j@ne @end|ng |rom un|ver@|t?t@de", HIDDEN),
+    ]);
+}
+
+#[test]
+fn a_combining_mark_belongs_to_the_letter_before_it() {
+    check_text(&[
+        ("jose\u{301}.garci\u{301}a at uni.es", HIDDEN),
+        ("jose\u{301}.garci\u{301}a@uni.es", HIDDEN),
+        ("jose\u{301} at uni.es", HIDDEN),
+        ("jose\u{301} @end|ng |rom un|@es", HIDDEN),
+        ("jane at universita\u{308}t.de", HIDDEN),
+        ("jane at uni.cafe\u{301} now", "[address hidden] now"),
+    ]);
+    check_names(&[(
+        "jose\u{301}.garci\u{301}a at uni.es",
+        "jose\u{301}.garci\u{301}a",
+    )]);
 }
