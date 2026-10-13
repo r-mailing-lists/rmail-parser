@@ -38,22 +38,31 @@ const UNKNOWN: &str = "unknown";
 /// read as a letter inside a name or a domain, and at the start of either.
 const LOST_LETTER: char = '?';
 
-/// Mailman's text form writes the `@` of an address as this.
-const AT: &str = " at ";
-
-/// The source's lossy form writes it as one of these, with a blank on each
-/// side. All four are in the files the source offers today.
+/// The source's lossy form writes the `@` of an address as one of these,
+/// with a blank on each side. All four are in the files the source offers
+/// today.
 const LOSSY: [&str; 4] = ["@end|ng |rom", "@ending from", "m@iii@g oii", "m@ili@g off"];
+
+/// A link writes it as the first of these, and a link inside a link as the
+/// second.
+const ESCAPED_SIGNS: [&str; 2] = ["%40", "%2540"];
 
 /// The ways an address is written in these archives.
 #[derive(Clone, Copy, PartialEq)]
 enum Form {
-    /// `mailbox at domain.tld`
+    /// `mailbox at domain.tld`, Mailman's text form, on one line or broken
+    /// over a line end. It is the one form that is a sentence as often as
+    /// an address.
     At,
-    /// `mailbox @end|ng |rom domain`, or another of the lossy separators
+    /// `mailbox AT domain.tld`, `mailbox (at) domain.tld` and the other
+    /// spellings people use to keep an address from being collected.
+    Spelled,
+    /// `mailbox @end|ng |rom domain`, or another of the lossy separators.
     Lossy,
     /// `mailbox@domain.tld`
     Sign,
+    /// `mailbox%40domain.tld`, in a link.
+    Link,
 }
 
 /// The domains the R mailing lists have their addresses at.
@@ -97,6 +106,36 @@ struct Separator {
     name_end: usize,
     /// Where a domain after it starts.
     domain_start: usize,
+    /// The line end inside it, with the quote marks that start the next
+    /// line. Empty for a separator on one line.
+    kept: Range<usize>,
+}
+
+impl Separator {
+    /// A separator with nothing but its own text between name and domain.
+    fn bare(form: Form, core: Range<usize>) -> Self {
+        Separator {
+            form,
+            name_end: core.start,
+            domain_start: core.end,
+            kept: core.end..core.end,
+            core,
+        }
+    }
+
+    /// A separator that may have one blank on either side of its text.
+    fn padded(text: &str, form: Form, core: Range<usize>, floor: usize) -> Self {
+        let bytes = text.as_bytes();
+        let before = core.start > floor && bytes[core.start - 1] == b' ';
+        let after = bytes.get(core.end) == Some(&b' ');
+        Separator {
+            form,
+            name_end: core.start - usize::from(before),
+            domain_start: core.end + usize::from(after),
+            kept: core.end..core.end,
+            core,
+        }
+    }
 }
 
 /// An address found in a text, as byte ranges of that text.
@@ -110,6 +149,9 @@ struct Address {
     separator_end: usize,
     /// What the marker takes the place of.
     hidden: Range<usize>,
+    /// The part of that which is written again after the marker: the line
+    /// end of an address broken over two lines.
+    kept: Range<usize>,
 }
 
 /// Replaces every mailbox address in `text` with a marker. The address of
@@ -129,6 +171,7 @@ pub fn hide_in_text(text: &str, list: &str) -> String {
         }
         out.push_str(&text[copied..found.hidden.start]);
         out.push_str(HIDDEN);
+        out.push_str(&text[found.kept.clone()]);
         copied = found.hidden.end;
         from = copied;
     }
@@ -173,7 +216,7 @@ pub fn hide_in_name(name: &str, list: &str) -> String {
             let mailbox = &whole[found.mailbox];
             let shown: String = match found.form {
                 Form::Lossy => mailbox.chars().filter(|c| !is_lost(*c)).collect(),
-                Form::At | Form::Sign => mailbox.to_string(),
+                _ => mailbox.to_string(),
             };
             if shown.is_empty() {
                 return UNKNOWN.to_string();
@@ -209,20 +252,128 @@ fn next_address(text: &str, from: usize, lossy: &[Range<usize>]) -> Option<Addre
 /// lands inside a longer character.
 fn separator_at(text: &str, at: usize, floor: usize) -> Option<Separator> {
     match text.as_bytes()[at] {
-        b' ' if text[at..].starts_with(AT) => Some(Separator {
-            form: Form::At,
-            core: at + 1..at + AT.len() - 1,
-            name_end: at,
-            domain_start: at + AT.len(),
-        }),
+        b' ' => word_separator(text, at),
+        b'\n' => separator_after_line_end(text, at, floor),
         b'@' | b'm' => lossy_separator(text, at, floor).or_else(|| {
-            text[at..].starts_with('@').then_some(Separator {
-                form: Form::Sign,
-                core: at..at + 1,
-                name_end: at,
-                domain_start: at + 1,
-            })
+            text[at..]
+                .starts_with('@')
+                .then(|| Separator::bare(Form::Sign, at..at + 1))
         }),
+        b'%' => ESCAPED_SIGNS
+            .iter()
+            .find(|sign| text[at..].starts_with(*sign))
+            .map(|sign| Separator::bare(Form::Link, at..at + sign.len())),
+        b'(' | b'[' | b'<' | b'{' | b'-' => spelled_separator(text, at, floor),
+        _ => None,
+    }
+}
+
+/// ` at ` or ` AT `, with the blank before the word at `at`. After the lower
+/// case word the line may end, and the domain then stands on the next line
+/// after its quote marks:
+///
+/// ```text
+/// ... Jane Doe <jane.doe at
+/// > uni.edu> wrote:
+/// ```
+fn word_separator(text: &str, at: usize) -> Option<Separator> {
+    let bytes = text.as_bytes();
+    let word = at + 1..at + 3;
+    let blank_after = bytes.get(word.end) == Some(&b' ');
+    match bytes.get(word.clone())? {
+        b"AT" if blank_after => Some(Separator {
+            form: Form::Spelled,
+            name_end: at,
+            domain_start: word.end + 1,
+            kept: word.end..word.end,
+            core: word,
+        }),
+        b"at" => {
+            let mut line_end = word.end + count(&bytes[word.end..], |b| b == b' ');
+            line_end += usize::from(bytes.get(line_end) == Some(&b'\r'));
+            if bytes.get(line_end) == Some(&b'\n') {
+                let domain_start = line_end + 1 + count(&bytes[line_end + 1..], is_quote_mark);
+                Some(Separator {
+                    form: Form::At,
+                    name_end: at,
+                    domain_start,
+                    kept: word.end..domain_start,
+                    core: word,
+                })
+            } else if blank_after {
+                Some(Separator {
+                    form: Form::At,
+                    name_end: at,
+                    domain_start: word.end + 1,
+                    kept: word.end..word.end,
+                    core: word,
+                })
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// `at ` at the start of the line that follows the line end at `at`, after
+/// that line's quote marks. The mailbox name then ends the line before:
+///
+/// ```text
+/// ... Jane Doe <jane.doe
+/// > at uni.edu> wrote:
+/// ```
+fn separator_after_line_end(text: &str, at: usize, floor: usize) -> Option<Separator> {
+    let bytes = text.as_bytes();
+    let word = at + 1 + count(&bytes[at + 1..], is_quote_mark);
+    if !bytes[word..].starts_with(b"at ") {
+        return None;
+    }
+    // Blanks and a carriage return before the line end belong to it.
+    let mut name_end = at;
+    name_end -= usize::from(name_end > floor && bytes[name_end - 1] == b'\r');
+    while name_end > floor && bytes[name_end - 1] == b' ' {
+        name_end -= 1;
+    }
+    Some(Separator {
+        form: Form::At,
+        name_end,
+        domain_start: word + 3,
+        kept: name_end..word,
+        core: word..word + 2,
+    })
+}
+
+/// How many bytes at the start of `bytes` pass `test`.
+fn count(bytes: &[u8], test: impl Fn(u8) -> bool) -> usize {
+    bytes.iter().take_while(|byte| test(**byte)).count()
+}
+
+/// True for what a mail program starts a quoted line with.
+fn is_quote_mark(byte: u8) -> bool {
+    matches!(byte, b'>' | b'|' | b' ')
+}
+
+/// `(at)`, `[at]`, `<at>`, `{at}` or `--at--` at `at`, in any letter case,
+/// with or without a blank on either side.
+fn spelled_separator(text: &str, at: usize, floor: usize) -> Option<Separator> {
+    let len = spelled_at(text, at)?;
+    Some(Separator::padded(text, Form::Spelled, at..at + len, floor))
+}
+
+/// The length of `(at)`, `[at]`, `<at>`, `{at}` or `--at--` at `at`.
+fn spelled_at(text: &str, at: usize) -> Option<usize> {
+    let is_at = |a: &u8, t: &u8| a.eq_ignore_ascii_case(&b'a') && t.eq_ignore_ascii_case(&b't');
+    match &text.as_bytes()[at..] {
+        [b'(', a, t, b')', ..]
+        | [b'[', a, t, b']', ..]
+        | [b'<', a, t, b'>', ..]
+        | [b'{', a, t, b'}', ..]
+            if is_at(a, t) =>
+        {
+            Some(4)
+        }
+        [b'-', b'-', a, t, b'-', b'-', ..] if is_at(a, t) => Some(6),
         _ => None,
     }
 }
@@ -230,22 +381,18 @@ fn separator_at(text: &str, at: usize, floor: usize) -> Option<Separator> {
 /// The lossy separator whose own text starts at `at`. The blank on each
 /// side of it may be missing.
 fn lossy_separator(text: &str, at: usize, floor: usize) -> Option<Separator> {
-    let bytes = text.as_bytes();
     // All four start with `@e` or `m@`. Most characters of a text are told
     // apart from a separator by that alone.
-    if !matches!(&bytes[at..], [b'@', b'e', ..] | [b'm', b'@', ..]) {
+    if !matches!(&text.as_bytes()[at..], [b'@', b'e', ..] | [b'm', b'@', ..]) {
         return None;
     }
     let core = LOSSY.iter().find(|core| text[at..].starts_with(*core))?;
-    let core = at..at + core.len();
-    let blank_before = core.start > floor && bytes[core.start - 1] == b' ';
-    let blank_after = bytes.get(core.end) == Some(&b' ');
-    Some(Separator {
-        form: Form::Lossy,
-        name_end: core.start - usize::from(blank_before),
-        domain_start: core.end + usize::from(blank_after),
-        core,
-    })
+    Some(Separator::padded(
+        text,
+        Form::Lossy,
+        at..at + core.len(),
+        floor,
+    ))
 }
 
 /// Every address of `text` in the lossy form, from the start of its name to
@@ -262,8 +409,8 @@ fn lossy_addresses(text: &str) -> Vec<Range<usize>> {
         };
         match separator {
             Some(separator) => {
-                let name = mailbox_before(text, separator.name_end, floor, true);
-                let domain = domain_after(text, separator.domain_start, true).range;
+                let name = mailbox_before(text, &separator, floor);
+                let domain = domain_after(text, separator.domain_start, Form::Lossy).range;
                 floor = domain.end.max(separator.core.end);
                 found.push(name.start..floor);
                 at = floor;
@@ -293,26 +440,27 @@ fn within_any(ranges: &[Range<usize>], at: usize) -> bool {
 /// The address around `separator`, if what stands on its two sides makes
 /// one. Its mailbox name does not reach back before `floor`.
 ///
-/// ` at ` is a sentence as often as an address, so both parts must be there.
-/// After a sign the domain is hidden even when no name is read before it:
-/// the name may be one this module does not know how to read, as
+/// ` at ` is a sentence as often as an address, so both parts must be there,
+/// and the same is asked of its other spellings. After a sign, written or
+/// escaped, the domain is hidden even when no name is read before it: the
+/// name may be one this module does not know how to read, as
 /// `"jane doe"@uni.edu` is. No sentence has the words of a lossy separator
 /// in it, so whatever stands on either side of one is hidden with it, be it
 /// only a name or only a domain.
 fn address(text: &str, separator: &Separator, floor: usize) -> Option<Address> {
-    let lossy = separator.form == Form::Lossy;
+    let form = separator.form;
     let Domain {
         range: domain,
         named,
-    } = domain_after(text, separator.domain_start, lossy);
+    } = domain_after(text, separator.domain_start, form);
     // The lossy form has few full stops left: it writes most as `@`.
-    if !lossy && !named {
+    if form != Form::Lossy && !named {
         return None;
     }
-    let mailbox = mailbox_before(text, separator.name_end, floor, lossy);
-    let missing = match separator.form {
-        Form::At => mailbox.is_empty(),
-        Form::Sign => false,
+    let mailbox = mailbox_before(text, separator, floor);
+    let missing = match form {
+        Form::At | Form::Spelled => mailbox.is_empty(),
+        Form::Sign | Form::Link => false,
         Form::Lossy => mailbox.is_empty() && domain.is_empty(),
     };
     if missing {
@@ -330,8 +478,9 @@ fn address(text: &str, separator: &Separator, floor: usize) -> Option<Address> {
         domain.end
     };
     Some(Address {
-        form: separator.form,
+        form,
         hidden: start..end,
+        kept: separator.kept.clone(),
         mailbox,
         domain,
         separator_end: separator.domain_start,
@@ -388,19 +537,34 @@ fn rest_after<'a>(written: &'a str, expected: &str, lossy: bool) -> Option<&'a s
     Some(rest.as_str())
 }
 
-/// The run of mailbox characters that ends at `end` and starts no earlier
-/// than `floor`, from the first letter or digit in it: a quotation mark or
-/// a dash before a name is a mailbox character too, but it is not part of
-/// the name. A character that stands for a lost letter is.
-fn mailbox_before(text: &str, end: usize, floor: usize, lossy: bool) -> Range<usize> {
+/// The mailbox name before `separator`: the run of mailbox characters that
+/// ends there and starts no earlier than `floor`, from the first letter or
+/// digit in it. A quotation mark or a dash before a name is a mailbox
+/// character too, but it is not part of the name. A character that stands
+/// for a lost letter is.
+fn mailbox_before(text: &str, separator: &Separator, floor: usize) -> Range<usize> {
+    let form = separator.form;
+    let end = separator.name_end;
     let mut start = end;
     for (at, c) in text[floor..end].char_indices().rev() {
-        if !(is_mailbox_char(c) || lossy && is_lost(c)) {
+        if !is_mailbox_char(c, form) {
             break;
         }
         start = floor + at;
     }
-    let opens = |c: char| c.is_alphanumeric() || c == LOST_LETTER || lossy && is_lost(c);
+    if form == Form::Link && start > floor && text.as_bytes()[start - 1] == b'%' {
+        // The name follows an escaped character, as in `%7Cjane.doe%40`,
+        // and the digits of that escape are not part of it. There are two
+        // of them, or four where the link is inside a link (`%257C`): as
+        // many as the escaped sign has.
+        let digits = separator.core.len() - 1;
+        let escape = text.as_bytes()[start..end].get(..digits);
+        if escape.is_some_and(|escape| escape.iter().all(u8::is_ascii_hexdigit)) {
+            start += digits;
+        }
+    }
+    let opens =
+        |c: char| c.is_alphanumeric() || c == LOST_LETTER || form == Form::Lossy && is_lost(c);
     let name = text[start..end].find(opens).unwrap_or(end - start);
     start + name..end
 }
@@ -409,9 +573,14 @@ fn mailbox_before(text: &str, end: usize, floor: usize, lossy: bool) -> Range<us
 /// any script, with the marks that combine with it, or one of the signs the
 /// mail standards allow in a name. The slash is one of those signs and is
 /// left out, because it ends the web address before a name far more often
-/// than it is part of a name.
-fn is_mailbox_char(c: char) -> bool {
-    c.is_alphanumeric() || is_mark(c) || ".!#$%&'*+-=?^_`{|}~".contains(c)
+/// than it is part of a name. In a link, the other signs that a link parts
+/// its pieces with are left out as well.
+fn is_mailbox_char(c: char, form: Form) -> bool {
+    let signs = match form {
+        Form::Link => ".!$'*+-^_`{}~",
+        _ => ".!#$%&'*+-=?^_`{|}~",
+    };
+    c.is_alphanumeric() || is_mark(c) || signs.contains(c) || form == Form::Lossy && c == '@'
 }
 
 /// True for an accent that is written after its letter, as a character of
@@ -443,7 +612,8 @@ struct Domain {
 }
 
 /// Reads the domain that starts at `start`.
-fn domain_after(text: &str, start: usize, lossy: bool) -> Domain {
+fn domain_after(text: &str, start: usize, form: Form) -> Domain {
+    let lossy = form == Form::Lossy;
     let mut end = start;
     let mut named = false;
     // A letter or a digit has been read.
@@ -453,8 +623,9 @@ fn domain_after(text: &str, start: usize, lossy: bool) -> Domain {
     // What `end` and `named` were at the first question mark that no full
     // stop has followed yet.
     let mut question = None;
-    for (at, c) in text[start..].char_indices() {
-        let after = start + at + c.len_utf8();
+    let mut at = start;
+    while let Some(c) = text[at..].chars().next() {
+        let after = at + c.len_utf8();
         if c.is_alphanumeric() || lossy && is_lost(c) {
             named |= stopped && c.is_alphabetic();
             (begun, stopped, end) = (true, false, after);
@@ -462,22 +633,37 @@ fn domain_after(text: &str, start: usize, lossy: bool) -> Domain {
             if lossy && c == '@' {
                 question = None;
             }
-        } else if is_mark(c) && end + c.len_utf8() == after {
+        } else if is_mark(c) && end == at {
             end = after;
         } else if c == '.' {
             stopped = begun;
             question = None;
-        } else if c == LOST_LETTER {
+        } else if c == LOST_LETTER && form != Form::Link {
             // It is the letter the source lost when a full stop follows it
             // in the domain, as in `universit?t.de`. When none does it is
-            // the sentence's own, or the start of a link's query.
+            // the sentence's own, or the start of a link's query, which is
+            // what it always is in a link.
             question = question.or(Some((end, named)));
             (begun, stopped) = (true, false);
-        } else if !matches!(c, '-' | '_' | '+' | '*') {
+        } else if let Some(len) = spelled_dot(text, at).filter(|_| end == at) {
+            // `uni dot edu`: the word stands for a full stop where it has a
+            // part of the domain on either side.
+            if !text[at + len..].starts_with(char::is_alphanumeric) {
+                break;
+            }
+            stopped = true;
+            question = None;
+            at += len;
+            continue;
+        } else if !matches!(c, '-' | '_' | '+' | '*') || spelled_at(text, at).is_some() {
             // Mailman takes `_` and `+` for part of a domain, and `*` and
-            // `_` are what a mail program puts around emphasised text.
+            // `_` are what a mail program puts around emphasised text. The
+            // dashes of `--at--` are the next separator and no part of this
+            // domain: were they read as one, a line of such separators
+            // would be read to its end from each of them.
             break;
         }
+        at = after;
     }
     if let Some(before) = question {
         (end, named) = before;
@@ -485,6 +671,24 @@ fn domain_after(text: &str, start: usize, lossy: bool) -> Domain {
     Domain {
         range: start..end,
         named,
+    }
+}
+
+/// The length of ` dot `, ` DOT `, `(dot)` or `[dot]` at `at`, the two in
+/// brackets in any letter case and with or without a blank on either side.
+fn spelled_dot(text: &str, at: usize) -> Option<usize> {
+    let rest = &text.as_bytes()[at..];
+    if rest.starts_with(b" dot ") || rest.starts_with(b" DOT ") {
+        return Some(5);
+    }
+    let before = usize::from(rest.first() == Some(&b' '));
+    match &rest[before..] {
+        [b'(', d, o, t, b')', after @ ..] | [b'[', d, o, t, b']', after @ ..]
+            if [*d, *o, *t].eq_ignore_ascii_case(b"dot") =>
+        {
+            Some(before + 5 + usize::from(after.first() == Some(&b' ')))
+        }
+        _ => None,
     }
 }
 

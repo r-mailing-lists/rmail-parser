@@ -479,7 +479,10 @@ fn a_megabyte_without_a_blank_or_a_sign_is_cleaned_in_well_under_a_second() {
 #[test]
 fn a_megabyte_without_a_blank_but_with_signs_is_cleaned_in_well_under_a_second() {
     // Signs with nothing that could be a domain after them.
-    for unit in ["@", "a@", "|@", "a.@", "@end|ng"] {
+    for unit in [
+        "@", "a@", "|@", "a.@", "@end|ng", "m", "m@", "m@iii@g", "%", "%40", "a%40", "%7Ca%40",
+        "(", "(at)", "a(at)", "-", "--at--", "[dot]",
+    ] {
         let line = unit.repeat(MEGABYTE / unit.len());
         assert!(hide_in_time(&line) == line, "{unit:?} repeated");
     }
@@ -507,9 +510,24 @@ fn a_megabyte_without_a_blank_but_with_signs_is_cleaned_in_well_under_a_second()
 
 #[test]
 fn a_megabyte_of_separators_with_blanks_is_cleaned_in_well_under_a_second() {
-    // ` at ` with no domain after it.
-    let line = "x at ".repeat(MEGABYTE / 5);
-    assert!(hide_in_time(&line) == line);
+    // Separators with no domain after them, and line ends with nothing
+    // that is broken over them.
+    for unit in [
+        "x at ",
+        "x AT ",
+        "x (at) ",
+        "x at a dot 5 ",
+        "x at\n",
+        "x at \r\n> ",
+        "x\nat ",
+        "\n",
+        "\n> ",
+        "> ",
+        " ",
+    ] {
+        let text = unit.repeat(MEGABYTE / unit.len());
+        assert!(hide_in_time(&text) == text, "{unit:?} repeated");
+    }
 
     // An address in each form, a list's address and a web address, again
     // and again on one line.
@@ -764,8 +782,19 @@ impl Numbers {
 fn any_text_is_cleaned_on_character_boundaries_and_gains_nothing_but_markers() {
     // What makes and what breaks an address, with characters of two, three
     // and four bytes among it. A cut inside one of those is a panic.
-    const PIECES: [&str; 36] = [
+    const PIECES: [&str; 47] = [
         " at ",
+        " at",
+        "at ",
+        " AT ",
+        "(at)",
+        "--at--",
+        " dot ",
+        "[dot]",
+        "%40",
+        "%7C",
+        "m@iii@g oii",
+        "> ",
         "@",
         "@end|ng |rom",
         " @end|ng |rom ",
@@ -810,13 +839,16 @@ fn any_text_is_cleaned_on_character_boundaries_and_gains_nothing_but_markers() {
 
         let cleaned = hide_in_text(&text, LIST);
 
-        // What is left between the markers is the text's own, in its order.
-        let mut rest = text.as_str();
-        for kept in cleaned.split(HIDDEN) {
-            let at = rest
-                .find(kept)
-                .unwrap_or_else(|| panic!("{text:?} became {cleaned:?}"));
-            rest = &rest[at + kept.len()..];
+        // What is left beside the markers is the text's own characters, in
+        // their order. They need not be neighbours in the text: of an
+        // address broken over two lines the line end stays, and the domain
+        // after it goes.
+        let mut rest = text.chars();
+        for kept in cleaned.split(HIDDEN).flat_map(str::chars) {
+            assert!(
+                rest.any(|c| c == kept),
+                "{text:?} became {cleaned:?}, which has a {kept:?} of its own"
+            );
         }
         // A name is cleaned by other code, on the same boundaries.
         hide_in_name(&text, LIST);
@@ -982,4 +1014,226 @@ fn a_combining_mark_belongs_to_the_letter_before_it() {
         "jose\u{301}.garci\u{301}a at uni.es",
         "jose\u{301}.garci\u{301}a",
     )]);
+}
+
+#[test]
+fn an_address_in_a_link_is_hidden_and_the_rest_of_the_link_stays() {
+    check_text(&[
+        // Mailman's own link to a member's options.
+        (
+            "https://stat.ethz.ch/mailman/options/r-sig-phylo/jane.doe%40uni.edu",
+            "https://stat.ethz.ch/mailman/options/r-sig-phylo/[address hidden]",
+        ),
+        // A link rewritten by the recipient's mail service, which puts the
+        // recipient into a parameter between two escaped bars.
+        (
+            "https://eur01.safelinks.protection.outlook.com/?url=http%3A%2F%2Fx.org&data=05%7C01%7Cjane.doe%40uni.edu%7Cabc&reserved=0",
+            "https://eur01.safelinks.protection.outlook.com/?url=http%3A%2F%2Fx.org&data=05%7C01%7C[address hidden]%7Cabc&reserved=0",
+        ),
+        (
+            "<mailto:jane.doe%40uni.edu?subject=hi>",
+            "<mailto:[address hidden]?subject=hi>",
+        ),
+        // The name ends at what a link separates its parts with.
+        (
+            "https://example.org/u?email=jane.doe%40uni.edu&x=1",
+            "https://example.org/u?email=[address hidden]&x=1",
+        ),
+        (
+            "https://example.org/u?a=1&jane.doe%40uni.edu",
+            "https://example.org/u?a=1&[address hidden]",
+        ),
+        ("x;jane.doe%40uni.edu;y", "x;[address hidden];y"),
+        ("to|jane.doe%40uni.edu|cc", "to|[address hidden]|cc"),
+        ("u=x%3ajane.doe%40uni.edu", "u=x%3a[address hidden]"),
+        // The domain ends at an escape and at the start of a query.
+        ("jane.doe%40uni.edu%3Fx", "[address hidden]%3Fx"),
+        ("jane.doe%40uni.edu?x.y=1", "[address hidden]?x.y=1"),
+        ("at jane.doe%40uni.edu.", "at [address hidden]."),
+        // No name is read before it, as after a sign.
+        ("https://example.org/%40uni.edu", "https://example.org/[address hidden]"),
+        // A link inside a link has the sign escaped twice.
+        (
+            "u=https%253A%252F%252Fx.org%252Fjane.doe%2540uni.edu%26y",
+            "u=https%253A%252F%252Fx.org%252F[address hidden]%26y",
+        ),
+    ]);
+    check_unchanged(&[
+        // A list's address stays in a link too.
+        "https://stat.ethz.ch/mailman/options/r-sig-phylo/r-sig-phylo%40r-project.org",
+        "mailto:r-help%40r-project.org?subject=help",
+        // An escaped sign with no domain after it.
+        "100%40 of them",
+        "x%40y",
+        "a 50%400.5 split",
+    ]);
+}
+
+#[test]
+fn an_address_spelled_with_at_in_brackets_or_dashes_is_hidden() {
+    let rows: Vec<(String, String)> = [
+        "(at)", "[at]", "<at>", "{at}", "(AT)", "[At]", "--at--", "--AT--",
+    ]
+    .iter()
+    .flat_map(|at| {
+        [
+            ("jane.doe AT uni.edu", "[address hidden]"),
+            ("jane.doeATuni.edu", "[address hidden]"),
+            ("jane.doe ATuni.edu", "[address hidden]"),
+            ("jane.doeAT uni.edu", "[address hidden]"),
+            (
+                "Jane Doe <jane.doe AT uni.edu> writes:",
+                "Jane Doe <[address hidden]> writes:",
+            ),
+            (
+                "write to jane.doeATuni.edu, please",
+                "write to [address hidden], please",
+            ),
+        ]
+        .map(|(text, want)| (text.replace("AT", at), want.to_string()))
+    })
+    .collect();
+    let rows: Vec<(&str, &str)> = rows
+        .iter()
+        .map(|(text, want)| (text.as_str(), want.as_str()))
+        .collect();
+    check_text(&rows);
+}
+
+#[test]
+fn an_address_spelled_with_at_in_capitals_is_hidden() {
+    check_text(&[
+        ("jane.doe AT uni.edu", HIDDEN),
+        (
+            "Jane Doe <jane.doe AT uni.edu> wrote:",
+            "Jane Doe <[address hidden]> wrote:",
+        ),
+        (
+            "https://stat.ethz.ch/mailman/options/r-sig-phylo/jane.doe--at--uni.edu",
+            "https://stat.ethz.ch/mailman/options/r-sig-phylo/[address hidden]",
+        ),
+        // The dashes of this spelling are not read as part of a domain, and
+        // the two dashes in the middle of another domain still are.
+        ("jane--at--uni--at--x.org", HIDDEN),
+        ("jane at xn--mller-kva.de", HIDDEN),
+        ("jane--at--xn--mller-kva.de", HIDDEN),
+    ]);
+}
+
+#[test]
+fn what_lets_a_sentence_stay_does_not_apply_to_another_spelling_of_at() {
+    check_text(&[
+        ("look (at) example.org", HIDDEN),
+        ("available AT www.example.org", HIDDEN),
+        (
+            "code [at] github.com/user/repo",
+            "[address hidden]/user/repo",
+        ),
+        ("see--at--example.org", HIDDEN),
+    ]);
+    // A list's address stays however the sign is spelled.
+    check_unchanged(&[
+        "r-help (at) r-project.org",
+        "R-sig-phylo AT r-project.org",
+        "r-help--at--r-project.org",
+    ]);
+}
+
+#[test]
+fn at_in_brackets_or_capitals_without_two_parts_is_left_alone() {
+    check_unchanged(&[
+        "predict(at)",
+        "x[at] <- 1",
+        "f(at) x",
+        "(at) uni.edu",
+        "jane (at) work",
+        "jane AT work",
+        "AT uni.edu",
+        // More than one blank on a side.
+        "look  (at)  example.org",
+        "jane.doe  AT  uni.edu",
+        // Brackets that are not a pair, and other words in them.
+        "jane.doe (at] uni.edu",
+        "jane.doe (cat) uni.edu",
+        "jane.doe -at- uni.edu",
+    ]);
+}
+
+#[test]
+fn a_domain_spelled_with_dot_between_its_parts_is_hidden() {
+    check_text(&[
+        ("jane at uni dot edu", HIDDEN),
+        ("jane.doe AT uni DOT edu", HIDDEN),
+        ("jane (at) uni (dot) edu", HIDDEN),
+        ("jane[at]uni[dot]edu", HIDDEN),
+        ("jane [at] uni [DOT] edu", HIDDEN),
+        ("jane@uni dot edu", HIDDEN),
+        (
+            "jane at dept dot uni.ac dot uk, I think",
+            "[address hidden], I think",
+        ),
+        // The word must stand between two parts of a domain.
+        ("jane at uni.edu dot", "[address hidden] dot"),
+        ("jane at uni.edu dot .", "[address hidden] dot ."),
+    ]);
+    check_unchanged(&[
+        "it points at the dot",
+        "a dot at the top",
+        "jane at uni dot 5",
+        "jane at uni  dot  edu",
+        "jane at uni Dot edu",
+        "jane at uni (dot edu",
+    ]);
+}
+
+#[test]
+fn an_address_broken_over_a_line_end_is_hidden_and_the_lines_stay() {
+    check_text(&[
+        (
+            "On Mon, Jane Doe <jane.doe at\n> uni.edu> wrote:",
+            "On Mon, Jane Doe <[address hidden]\n> > wrote:",
+        ),
+        (
+            "On Mon, Jane Doe <jane.doe\n> at uni.edu> wrote:",
+            "On Mon, Jane Doe <[address hidden]\n> > wrote:",
+        ),
+        ("jane.doe at\nuni.edu", "[address hidden]\n"),
+        ("jane.doe\nat uni.edu", "[address hidden]\n"),
+        (
+            "> > jane.doe at\n> > uni.edu, I think",
+            "> > [address hidden]\n> > , I think",
+        ),
+        ("| jane.doe at\n| uni.edu", "| [address hidden]\n| "),
+        ("jane.doe at\n   uni.edu", "[address hidden]\n   "),
+        // Blanks and a carriage return at the end of the line.
+        ("jane.doe at \r\n> uni.edu", "[address hidden] \r\n> "),
+        ("jane.doe \r\n> at uni.edu", "[address hidden] \r\n> "),
+    ]);
+}
+
+#[test]
+fn a_sentence_broken_over_a_line_end_stays_as_it_does_on_one_line() {
+    check_unchanged(&[
+        "the notes are available at\n> www.example.org/phylo",
+        "the code at\ngithub.com/user/repo",
+        "the files are hosted\n> at example.org",
+        "R-sig-phylo mailing list - R-sig-phylo at\n> r-project.org",
+        // No domain on the next line, or an empty line between.
+        "we met at\nnoon",
+        "first line\nat last",
+        "jane.doe at\n\nuni.edu",
+        "jane.doe\n\nat uni.edu",
+        "jane.doe at\n> \n> uni.edu",
+    ]);
+}
+
+#[test]
+fn a_display_name_in_another_spelling_becomes_its_mailbox_name() {
+    check_names(&[
+        ("jane.doe (at) uni.edu", "jane.doe"),
+        ("jane.doe[at]uni.edu", "jane.doe"),
+        ("jane.doe AT uni DOT edu", "jane.doe"),
+        ("jane.doe%40uni.edu", "jane.doe"),
+        ("jane.doe--at--uni.edu", "jane.doe"),
+    ]);
 }
