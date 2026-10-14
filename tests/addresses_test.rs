@@ -462,22 +462,58 @@ fn what_may_be_an_address_is_hidden() {
 /// One megabyte.
 const MEGABYTE: usize = 1 << 20;
 
-/// Cleans `text`, and fails if that has not ended after a second. A scan
-/// that is linear in the length of the text takes a fraction of a second
-/// for a megabyte, and one that goes back over the line at every separator
-/// takes minutes. The work is done on a thread of its own, so that such a
-/// scan fails the test after that second and does not hold up the run.
+/// Cleans `text`, and fails once that has taken five seconds of the
+/// processor's time. A scan that is linear in the length of the text takes
+/// a fraction of a second for a megabyte, and one that goes back over the
+/// line at every separator takes minutes. The work is done on a thread of
+/// its own, so that such a scan fails the test and does not hold up the
+/// run.
+///
+/// The time that counts is the processor's and not the clock's: on a
+/// machine that is busy with other work a fraction of a second of work
+/// takes many seconds on the clock, and a limit there failed whenever the
+/// machine was loaded.
 fn hide_in_time(text: &str) -> String {
     let (done, result) = mpsc::channel();
     let owned = text.to_string();
+    let start = processor_seconds();
     thread::spawn(move || done.send(hide_in_text(&owned, LIST)));
-    result
-        .recv_timeout(Duration::from_secs(1))
-        .unwrap_or_else(|_| panic!("{} bytes took more than a second", text.len()))
+    loop {
+        match result.recv_timeout(Duration::from_millis(20)) {
+            Ok(cleaned) => return cleaned,
+            Err(_) if processor_seconds() - start > 5.0 => {
+                panic!("{} bytes took more than five seconds", text.len())
+            }
+            Err(_) => {}
+        }
+    }
+}
+
+/// The processor time this process has used, in seconds. It is the time of
+/// all its threads, so it also counts the tests that run beside this one,
+/// none of which is long.
+#[cfg(unix)]
+fn processor_seconds() -> f64 {
+    extern "C" {
+        /// The C library's `clock`, which counts in millionths of a second
+        /// on every Unix.
+        fn clock() -> std::ffi::c_long;
+    }
+    // SAFETY: `clock` takes no argument and only reads the process's times.
+    unsafe { clock() as f64 / 1e6 }
+}
+
+/// Where the processor's time is not to be had this way, the clock's.
+#[cfg(not(unix))]
+fn processor_seconds() -> f64 {
+    use std::sync::OnceLock;
+    use std::time::Instant;
+    static START: OnceLock<Instant> = OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_secs_f64()
 }
 
 #[test]
-fn a_megabyte_without_a_blank_or_a_sign_is_cleaned_in_well_under_a_second() {
+fn a_megabyte_without_a_blank_or_a_sign_is_cleaned_in_seconds_and_not_minutes() {
     let line = "a".repeat(MEGABYTE);
     assert!(hide_in_time(&line) == line);
     let line = "ab.".repeat(MEGABYTE / 3);
@@ -487,7 +523,7 @@ fn a_megabyte_without_a_blank_or_a_sign_is_cleaned_in_well_under_a_second() {
 }
 
 #[test]
-fn a_megabyte_without_a_blank_but_with_signs_is_cleaned_in_well_under_a_second() {
+fn a_megabyte_without_a_blank_but_with_signs_is_cleaned_in_seconds_and_not_minutes() {
     // Signs with nothing that could be a domain after them.
     for unit in [
         "@", "a@", "|@", "a.@", "@end|ng", "m", "m@", "m@iii@g", "%", "%40", "a%40", "%7Ca%40",
@@ -523,7 +559,7 @@ fn a_megabyte_without_a_blank_but_with_signs_is_cleaned_in_well_under_a_second()
 }
 
 #[test]
-fn a_megabyte_of_separators_with_blanks_is_cleaned_in_well_under_a_second() {
+fn a_megabyte_of_separators_with_blanks_is_cleaned_in_seconds_and_not_minutes() {
     // Separators with no domain after them, and line ends with nothing
     // that is broken over them.
     for unit in [
@@ -1750,4 +1786,75 @@ fn every_lossy_separator_is_found_at_any_place_in_a_text() {
             );
         }
     }
+}
+
+#[test]
+fn a_sign_after_a_soft_line_break_does_not_stand_alone() {
+    // A mail program that wraps a long line may end it with `=` and go on
+    // with the sign on the next. The name before the `=` goes with the
+    // domain, and the break stays where it is.
+    check_text(&[
+        (
+            "[mailto:jane.doe at uni.edu<mailto:jane.doe=\n@uni.edu>]",
+            "[mailto:[address hidden]<mailto:[address hidden]=\n>]",
+        ),
+        (
+            "<mailto:jane.doe=\r\n@uni.edu>",
+            "<mailto:[address hidden]=\r\n>",
+        ),
+        ("jane=\n@uni.edu", "[address hidden]=\n"),
+        // With no name before the `=` the domain goes all the same.
+        ("see =\n@uni.edu", "see =\n[address hidden]"),
+        ("<mailto:=\r\n@uni.edu>", "<mailto:=\r\n[address hidden]>"),
+    ]);
+    check_unchanged(&[
+        // A list's address stays over the break as well.
+        "<mailto:r-help=\n@r-project.org>",
+        // A line end with no `=` directly before it is a line end.
+        "the slots are\n@loc.names and others",
+        "x = y\n@loc.names",
+        "x =\n\n@loc.names",
+    ]);
+}
+
+#[test]
+fn after_a_sign_with_no_name_before_it_dot_is_a_word() {
+    // The domain is read up to the word, and hidden where a name that
+    // cannot be read stands before the sign.
+    check_text(&[
+        (
+            "\"jane doe\"@uni.edu dot org",
+            "\"jane doe\"[address hidden] dot org",
+        ),
+        (
+            "(jane)@uni.edu (dot) org",
+            "(jane)[address hidden] (dot) org",
+        ),
+        ("x/%40uni.edu dot org", "x/[address hidden] dot org"),
+        ("see =\n@uni.edu dot org", "see =\n[address hidden] dot org"),
+    ]);
+    check_unchanged(&[
+        // Without the word there is no domain.
+        "\"jane doe\"@uni dot edu",
+        "x/@uni dot edu",
+        "x/%40uni dot edu",
+        // And a sign that stands alone stays, whatever follows it.
+        "@uni.edu dot org",
+        "@return dot product of x",
+    ]);
+    // With a name before the sign the word is part of the domain.
+    check_text(&[("jane@uni dot edu", HIDDEN), ("jane%40uni dot edu", HIDDEN)]);
+}
+
+#[test]
+fn a_name_spelled_with_dot_holds_a_full_stop_for_the_slash_rule() {
+    check_text(&[
+        ("jane dot doe at uni dot edu/", "[address hidden]/"),
+        (
+            "jane (dot) doe at uni (dot) edu/~jane",
+            "[address hidden]/~jane",
+        ),
+    ]);
+    // A name of one word before a spelled domain and a path is a word.
+    check_unchanged(&["the code at github dot com/user/repo"]);
 }

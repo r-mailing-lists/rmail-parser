@@ -175,6 +175,9 @@ struct Address {
     /// The part of that which is written again after the marker: the line
     /// end of an address broken over two lines.
     kept: Range<usize>,
+    /// True when the name has a full stop that is spelled out, as in
+    /// `jane dot doe`.
+    name_spelled: bool,
 }
 
 /// Replaces every mailbox address in `text` with a marker. The address of
@@ -347,13 +350,38 @@ fn separator_at(text: &str, at: usize, floor: usize) -> Option<Separator> {
     match text.as_bytes()[at] {
         b' ' => word_separator(text, at),
         b'\n' => separator_after_line_end(text, at, floor),
-        b'@' => Some(Separator::bare(Form::Sign, at..at + 1)),
+        b'@' => Some(sign_separator(text, at, floor)),
         b'%' => ESCAPED_SIGNS
             .iter()
             .find(|sign| text[at..].starts_with(*sign))
             .map(|sign| Separator::bare(Form::Link, at..at + sign.len())),
         b'(' | b'[' | b'<' | b'{' | b'-' => spelled_separator(text, at, floor),
         _ => None,
+    }
+}
+
+/// The sign at `at`. A mail program that wraps a long line may end it with
+/// `=` and go on with the sign on the next:
+///
+/// ```text
+/// <mailto:jane.doe=
+/// @uni.edu>
+/// ```
+///
+/// The name then ends before that mark, and the mark and the line end stay
+/// in the text.
+fn sign_separator(text: &str, at: usize, floor: usize) -> Separator {
+    let before = &text.as_bytes()[floor..at];
+    let soft_break = [&b"=\r\n"[..], b"=\n"]
+        .into_iter()
+        .find(|line_end| before.ends_with(line_end))
+        .map_or(0, <[u8]>::len);
+    Separator {
+        form: Form::Sign,
+        core: at..at + 1,
+        name_end: at - soft_break,
+        domain_start: at + 1,
+        kept: at - soft_break..at,
     }
 }
 
@@ -526,13 +554,21 @@ fn within_any(ranges: &[Range<usize>], at: usize) -> bool {
 /// hidden with it, be it only a name or only a domain.
 fn address(text: &str, separator: &Separator, floor: usize) -> Option<Address> {
     let form = separator.form;
-    let found = domain_after(text, separator.domain_start, form);
-    let domain = found.range;
+    let mut found = domain_after(text, separator.domain_start, form);
     // The lossy form has few full stops left: it writes most as `@`.
     if form != Form::Lossy && !found.named {
         return None;
     }
     let mut mailbox = mailbox_before(text, separator, floor);
+    if mailbox.is_empty() && matches!(form, Form::Sign | Form::Link) && found.spelled {
+        // After a sign with no name before it `dot` is a word, and the
+        // domain is what stands before that word.
+        found = plain_domain_after(text, separator.domain_start, form);
+        if !found.named {
+            return None;
+        }
+    }
+    let domain = found.range;
     let is_one = match form {
         Form::At if !separator.kept.is_empty() => {
             !mailbox.is_empty() && looks_like_one(text, &mailbox, &domain)
@@ -543,15 +579,15 @@ fn address(text: &str, separator: &Separator, floor: usize) -> Option<Address> {
         // address. Where something stands before it that ends a name, a
         // closing quotation mark as in `"jane doe"@uni.edu`, the name is
         // one this module cannot read, and the domain is hidden. The same
-        // is done after an escaped sign, which only a link has. Neither is
-        // followed by a domain that is spelled out with `dot`.
-        Form::Sign => !mailbox.is_empty() || !(found.spelled || stands_alone(text, mailbox.end)),
-        Form::Link => !mailbox.is_empty() || !found.spelled,
+        // is done after an escaped sign, which only a link has.
+        Form::Sign => !mailbox.is_empty() || !stands_alone(text, separator),
+        Form::Link => true,
         Form::Lossy => !(mailbox.is_empty() && domain.is_empty()),
     };
     if !is_one {
         return None;
     }
+    let mut name_spelled = false;
     if found.spelled {
         // `jane dot doe at uni dot edu`: where the domain is spelled out,
         // the name may be too, and its parts belong to it.
@@ -561,6 +597,7 @@ fn address(text: &str, separator: &Separator, floor: usize) -> Option<Address> {
                 break;
             }
             mailbox.start = part.start;
+            name_spelled = true;
         }
     }
     // A part that is missing leaves the blank beside the separator alone.
@@ -574,13 +611,21 @@ fn address(text: &str, separator: &Separator, floor: usize) -> Option<Address> {
     } else {
         domain.end
     };
+    // With no name before it, what the separator keeps is not hidden at
+    // all, and is not written a second time.
+    let kept = if mailbox.is_empty() {
+        start..start
+    } else {
+        separator.kept.clone()
+    };
     Some(Address {
         form,
         hidden: start..end,
-        kept: separator.kept.clone(),
+        kept,
         mailbox,
         domain,
         separator_end: separator.domain_start,
+        name_spelled,
     })
 }
 
@@ -598,14 +643,19 @@ fn looks_like_one(text: &str, mailbox: &Range<usize>, domain: &Range<usize>) -> 
         || text[domain.end..].starts_with(['>', ')', ']'])
 }
 
-/// True when the sign at `at` has nothing before it that a name could have
-/// ended with: it stands at the start of the text or of a line, after a
-/// blank, or after an opening bracket or quotation mark.
-fn stands_alone(text: &str, at: usize) -> bool {
+/// True when the sign of `separator` has nothing before it that a name
+/// could have ended with: it stands at the start of the text or of a line,
+/// after a blank, or after an opening bracket or quotation mark. It does
+/// not stand alone at the start of a line that a mail program has wrapped,
+/// which the `=` at the end of the line before tells.
+fn stands_alone(text: &str, separator: &Separator) -> bool {
     let opens = |c: char| {
         c.is_whitespace() || "([{<\u{ab}\u{2018}\u{201a}\u{201c}\u{201e}\u{2039}".contains(c)
     };
-    let mut before = text[..at].chars().rev();
+    if !separator.kept.is_empty() {
+        return false;
+    }
+    let mut before = text[..separator.core.start].chars().rev();
     match before.next() {
         None => true,
         Some(c) if opens(c) => true,
@@ -669,7 +719,7 @@ fn stays(text: &str, found: &Address, list: &str) -> bool {
     // a hidden word is a small loss, a published address cannot be taken
     // back.
     domain.starts_with("www.")
-        || is_path(text, found.domain.end) && !mailbox.contains('.')
+        || is_path(text, found.domain.end) && !(mailbox.contains('.') || found.name_spelled)
         || ORDINARY_WORDS
             .iter()
             .any(|word| mailbox.eq_ignore_ascii_case(word))
@@ -829,8 +879,21 @@ struct Domain {
     spelled: bool,
 }
 
-/// Reads the domain that starts at `start`.
+/// Reads the domain that starts at `start`. A full stop of it may be
+/// spelled out.
 fn domain_after(text: &str, start: usize, form: Form) -> Domain {
+    read_domain(text, start, form, true)
+}
+
+/// Reads the domain that starts at `start` up to the first spelled full
+/// stop: what follows a sign with no name before it.
+fn plain_domain_after(text: &str, start: usize, form: Form) -> Domain {
+    read_domain(text, start, form, false)
+}
+
+/// Reads the domain that starts at `start`, with the full stops that are
+/// spelled out if `spelled_dots` says so.
+fn read_domain(text: &str, start: usize, form: Form, spelled_dots: bool) -> Domain {
     let lossy = form == Form::Lossy;
     let mut end = start;
     let mut named = false;
@@ -869,7 +932,9 @@ fn domain_after(text: &str, start: usize, form: Form) -> Domain {
             // what it always is in a link.
             question = question.or(Some((end, named)));
             (begun, stopped) = (true, false);
-        } else if let Some(len) = spelled_dot(text, at).filter(|_| begun && end == at) {
+        } else if let Some(len) =
+            spelled_dot(text, at).filter(|_| spelled_dots && begun && end == at)
+        {
             // `uni dot edu`: the word stands for a full stop where it has a
             // part of the domain on either side.
             if !text[at + len..].starts_with(char::is_alphanumeric) {
