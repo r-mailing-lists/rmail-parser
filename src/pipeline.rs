@@ -8,6 +8,7 @@ use encoding_rs::WINDOWS_1252;
 use rayon::prelude::*;
 use serde::Deserialize;
 
+use crate::addresses;
 use crate::mbox::split_mbox;
 use crate::message::{make_snippet, parse_message, Message};
 use crate::output::{
@@ -221,6 +222,15 @@ impl AliasMap {
             path.display()
         );
         Ok(map)
+    }
+
+    /// Hides the addresses in the names the alias file gives to people.
+    /// Some of those names are an address, and one of them would otherwise
+    /// be written into `contributors.json` past the cleaning of the messages.
+    fn hide_addresses(&mut self, list_name: &str) {
+        for name in self.canonical_names.values_mut() {
+            *name = addresses::hide_in_name(name, list_name);
+        }
     }
 
     /// Resolve an email hash to its canonical hash.
@@ -476,6 +486,12 @@ impl StatsAccumulator {
 ///   URL at the source, each message with a known page gets its `source_url`
 ///   and the characters that page restores. Without it, or for a raw file
 ///   with no `sources/` file, the output is what it always was.
+/// - If `hide_addresses` is true, each message is cleaned by
+///   `addresses::hide_in_message` before anything is made from it, which
+///   hides the addresses that module can read, and its Message-ID and the
+///   identifiers of the messages it answers are written as hashes. The
+///   README lists what is read as an address and what is known to stay. If
+///   it is false, nothing changes.
 pub fn run_parse(
     input: &Path,
     output: &Path,
@@ -483,6 +499,7 @@ pub fn run_parse(
     generate_stats: bool,
     aliases_path: Option<&Path>,
     source_pages: Option<(&Path, &str)>,
+    hide_addresses: bool,
 ) -> Result<()> {
     let files = discover_mbox_files(input)?;
 
@@ -493,7 +510,10 @@ pub fn run_parse(
     fs::create_dir_all(output).context("Failed to create output directory")?;
 
     let mut stats = if generate_stats {
-        let alias_map = AliasMap::load(aliases_path)?;
+        let mut alias_map = AliasMap::load(aliases_path)?;
+        if hide_addresses {
+            alias_map.hide_addresses(list_name);
+        }
         Some(StatsAccumulator::new(list_name, alias_map))
     } else {
         None
@@ -540,6 +560,13 @@ pub fn run_parse(
             if let Some(mut msg) = slot {
                 if let (Some(period), Some((_, base_url))) = (&period_sources, source_pages) {
                     apply_source(&mut msg, period, position, base_url);
+                }
+                // After the page has restored the text, so that an address
+                // it completed is hidden too, and before anything is made
+                // from the message: threads, contributors and the index all
+                // come from what is left here.
+                if hide_addresses {
+                    addresses::hide_in_message(&mut msg, list_name);
                 }
                 messages.push(msg);
             }
@@ -591,6 +618,16 @@ pub fn run_parse(
         // Accumulate stats before moving messages into the archive
         if let Some(ref mut s) = stats {
             s.accumulate(&month, &month_messages, threads.len());
+        }
+
+        // Only now, when duplicates are gone and the threads are built, are
+        // the Message-IDs written as hashes: every id and every thread was
+        // made from them as the source has them, and so is what a run that
+        // hides nothing makes.
+        if hide_addresses {
+            month_messages
+                .iter_mut()
+                .for_each(addresses::hide_identifiers);
         }
 
         let archive = MonthArchive {

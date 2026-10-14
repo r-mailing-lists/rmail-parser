@@ -41,6 +41,9 @@ enum Commands {
         /// The list's archive at the source, as given to `sources` (needs --sources)
         #[arg(long, requires = "sources")]
         base_url: Option<String>,
+        /// Hide mailbox addresses in names, subjects and text, and write Message-IDs as hashes (for a list whose archive only its members can read)
+        #[arg(long, default_value_t = false)]
+        hide_addresses: bool,
     },
     /// Fetch the source's index and message pages into sources/ files
     Sources {
@@ -109,6 +112,7 @@ fn main() {
             aliases,
             sources,
             base_url,
+            hide_addresses,
         } => {
             // clap has already made sure the two come together.
             let source_pages = match (&sources, &base_url) {
@@ -122,6 +126,7 @@ fn main() {
                 !no_stats,
                 aliases.as_deref().map(Path::new),
                 source_pages,
+                hide_addresses,
             )
         }
         Commands::Sources {
