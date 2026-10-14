@@ -486,11 +486,12 @@ impl StatsAccumulator {
 ///   URL at the source, each message with a known page gets its `source_url`
 ///   and the characters that page restores. Without it, or for a raw file
 ///   with no `sources/` file, the output is what it always was.
-/// - If `hide_addresses` is true, no file that is written holds a mailbox
-///   address: each message is cleaned by `addresses::hide_in_message` before
-///   anything is made from it, and its Message-ID and the identifiers of the
-///   messages it answers are written as hashes. If it is false, nothing
-///   changes.
+/// - If `hide_addresses` is true, each message is cleaned by
+///   `addresses::hide_in_message` before anything is made from it, which
+///   hides the addresses that module can read, and its Message-ID and the
+///   identifiers of the messages it answers are written as hashes. The
+///   README lists what is read as an address and what is known to stay. If
+///   it is false, nothing changes.
 pub fn run_parse(
     input: &Path,
     output: &Path,

@@ -382,13 +382,21 @@ fn a_domain_is_hidden_in_full_whatever_characters_it_has() {
 }
 
 #[test]
-fn a_domain_after_a_sign_is_hidden_even_without_a_mailbox_name() {
+fn a_domain_is_hidden_where_a_name_is_there_but_cannot_be_read() {
     check_text(&[
         // A name in quotation marks is not read as a name, so the domain
         // must go: left in place it would complete the address.
         ("\"jane doe\"@uni.edu", "\"jane doe\"[address hidden]"),
-        ("@uni.edu", HIDDEN),
-        ("everyone @uni.edu knows", "everyone [address hidden] knows"),
+        (
+            "jane doe\u{201d}@uni.edu",
+            "jane doe\u{201d}[address hidden]",
+        ),
+        // So it is after other signs that end a name, or a part of a link.
+        ("(jane)@uni.edu", "(jane)[address hidden]"),
+        ("to:@uni.edu", "to:[address hidden]"),
+        ("x/@uni.edu", "x/[address hidden]"),
+        ("--@uni.edu", "--[address hidden]"),
+        // The lossy forms hide what is there, with or without a name.
         (
             "\"jane doe\" @end|ng |rom un|@edu",
             "\"jane doe\" [address hidden]",
@@ -638,7 +646,6 @@ fn a_display_name_with_nothing_left_to_show_becomes_unknown() {
     check_names(&[
         // An address with an empty mailbox name: none at all, or one the
         // lossy form lost every character of.
-        ("@uni.edu", "unknown"),
         ("@end|ng |rom ex@mp|e@org", "unknown"),
         ("@| @end|ng |rom ex@mp|e@org", "unknown"),
         // Nothing but the marker and blanks.
@@ -929,6 +936,9 @@ fn a_list_s_address_stays_after_each_lossy_separator() {
     check_text(&[
         ("j@ne.doe @ending from r-project.org", HIDDEN),
         ("r-heip m@iii@g oii ex@mpie.org", HIDDEN),
+        // A list's domain with a letter changed by the form it is in is
+        // not known for one.
+        ("r-sig-phyio m@iii@g oii iists.r-project.org", HIDDEN),
         ("j@ne m@ili@g off r-project.org", HIDDEN),
     ]);
 }
@@ -1062,6 +1072,11 @@ fn an_address_in_a_link_is_hidden_and_the_rest_of_the_link_stays() {
         (
             "u=https%253A%252F%252Fx.org%252Fjane.doe%2540uni.edu%26y",
             "u=https%253A%252F%252Fx.org%252F[address hidden]%26y",
+        ),
+        // The escape before the name may be escaped once all the same.
+        (
+            "u=https%3A%2F%2Fy.org%2Fo%2Fjane.doe%2540uni.edu%26d",
+            "u=https%3A%2F%2Fy.org%2Fo%2F[address hidden]%26d",
         ),
     ]);
     check_unchanged(&[
@@ -1512,4 +1527,227 @@ fn what_is_known_to_stay_visible_stays() {
         // An HTML entity for the sign.
         "jane.doe&#64;uni.edu",
     ]);
+}
+
+#[test]
+fn a_sign_with_no_name_before_it_is_not_an_address() {
+    // It is a slot of an R object or a handle on a social network: at the
+    // start of a line, after a blank, after an opening bracket or quote.
+    check_unchanged(&[
+        "@uni.edu",
+        "everyone @uni.edu knows",
+        "Slots:\n@loc.names: the names",
+        "   @loc.names: the names of the loci",
+        "the slot (@loc.names) holds them",
+        "[@name.bsky.social]",
+        "<@name.bsky.social>",
+        "{@loc.names}",
+        "follow \"@name.bsky.social\" there",
+        "the slot '@loc.names'",
+        "(\"@name.bsky.social\")",
+        "`@loc.names`",
+        "\u{201c}@name.bsky.social\u{201d}",
+        "\u{2018}@loc.names\u{2019}",
+        "@return dot product of x",
+        "@param dot the dot argument",
+    ]);
+    check_names(&[("@name.bsky.social", "@name.bsky.social")]);
+}
+
+#[test]
+fn a_sign_with_a_name_directly_before_it_is_an_address_as_before() {
+    check_text(&[
+        ("jane@uni.edu", HIDDEN),
+        ("obj@loc.names", HIDDEN),
+        ("(jane@uni.edu)", "([address hidden])"),
+        ("\"jane@uni.edu\"", "\"[address hidden]\""),
+        // After a hidden address a sign and a domain still go with it.
+        ("me at jane.doe@uni.edu", HIDDEN),
+    ]);
+}
+
+#[test]
+fn a_sign_inside_a_lossy_address_does_not_let_an_address_stay() {
+    check_text(&[
+        // What stands before the lossy separator starts like a list's name,
+        // but a list's name holds no full stop.
+        ("biocjane@uni.edu @ending from r-project.org", HIDDEN),
+        ("r-x@evil.org @end|ng |rom r-project@org", HIDDEN),
+        ("r-help.jane at r-project.org", HIDDEN),
+        ("bioc.jane@r-project.org", HIDDEN),
+        ("r-sig-phylo.jane%40r-project.org", HIDDEN),
+        // A domain ends where a lossy separator starts, also where no
+        // blank parts the two.
+        ("x (at) github.comm@ili@g offjane.doe@uni.edu", HIDDEN),
+        ("x at github.comm@iii@g oii jane.doe@uni.edu", HIDDEN),
+        (
+            "see github.comm@iii@g oiijane.doe@uni.edu",
+            "see [address hidden]",
+        ),
+        ("x@a.b@ending from c.d@e.f", HIDDEN),
+    ]);
+    // A list's address in a lossy form stays, with the marks of that form
+    // in its domain.
+    check_unchanged(&[
+        "r-devel @ending from @t@t.m@th.ethz.ch",
+        "R-@|g-phy|o @end|ng |rom r-project@org",
+    ]);
+}
+
+#[test]
+fn in_a_link_a_name_after_a_sign_of_a_bounce_address_is_not_a_list_s() {
+    check_text(&[
+        (
+            "mailto:r-sig-phylo-bounces+jane.doe=biochem.uni.edu%40r-project.org",
+            "mailto:r-sig-phylo-bounces+jane.doe=[address hidden]",
+        ),
+        (
+            "<mailto:r-sig-phylo-bounces+jane.doe=r-lab.uni.edu%40r-project.org>",
+            "<mailto:r-sig-phylo-bounces+jane.doe=[address hidden]>",
+        ),
+        // Also when the name after the sign has no full stop in it.
+        (
+            "mailto:bounces+jane=r-help%40r-project.org",
+            "mailto:bounces+jane=[address hidden]",
+        ),
+        (
+            "https://x.org/?to=r-help%40r-project.org",
+            "https://x.org/?to=[address hidden]",
+        ),
+        // And after an escape, of a sign or of anything else.
+        (
+            "mailto:r-sig-phylo-bounces%2Bjane.doe%3Dbiocenter.helsinki.fi%40r-project.org",
+            "mailto:r-sig-phylo-bounces%2Bjane.doe%3D[address hidden]",
+        ),
+        (
+            "data=05%7C01%7Cr-help%40r-project.org%7Cx",
+            "data=05%7C01%7C[address hidden]%7Cx",
+        ),
+        (
+            "u=https%253A%252F%252Fx.org%252Fr-help%2540r-project.org",
+            "u=https%253A%252F%252Fx.org%252F[address hidden]",
+        ),
+        (
+            "u=https%3A%2F%2Fx.org%2Fr-help%2540r-project.org",
+            "u=https%3A%2F%2Fx.org%2F[address hidden]",
+        ),
+    ]);
+    // After a slash or a colon a list's address is still one.
+    check_unchanged(&[
+        "https://stat.ethz.ch/mailman/options/r-sig-phylo/r-sig-phylo%40r-project.org",
+        "mailto:r-help%40r-project.org?subject=help",
+        "<mailto:r-help%40r-project.org>",
+    ]);
+}
+
+#[test]
+fn a_spelled_dot_counts_only_between_two_parts_of_a_domain() {
+    check_unchanged(&[
+        "stuck at (dot) operator",
+        "stuck at [dot] operator",
+        "x at dot y",
+        "see x/%40uni dot edu",
+    ]);
+    check_text(&[
+        ("jane at uni (dot) edu", HIDDEN),
+        ("see x/%40uni.edu", "see x/[address hidden]"),
+    ]);
+}
+
+#[test]
+fn a_slash_lets_a_web_address_stay_unless_an_address_follows_it() {
+    // A separator after the path with no domain after it is a word.
+    check_unchanged(&[
+        "the code at github.com/user/repo at the moment",
+        "pkg at github.com/user/repo@v1.0",
+        "my profile at fosstodon.org/@jane",
+        "the code at github.com/user/repo AT LAST",
+        "code at github.com/user/repo\nat home",
+        "more at example.org/100%40",
+    ]);
+    check_text(&[
+        (
+            "notes at example.org/a%40b.c",
+            "[address hidden]/[address hidden]",
+        ),
+        (
+            "jane at x.org/c.d at y.org",
+            "[address hidden]/[address hidden]",
+        ),
+    ]);
+}
+
+#[test]
+fn a_name_spelled_with_dot_goes_with_a_domain_spelled_so() {
+    check_text(&[
+        ("jane dot doe at uni dot edu", HIDDEN),
+        ("jane DOT doe AT uni DOT edu", HIDDEN),
+        ("jane (dot) doe (at) uni (dot) edu", HIDDEN),
+        ("jane[dot]doe[at]uni[dot]edu", HIDDEN),
+        ("jane dot doe@uni dot edu", HIDDEN),
+        (
+            "write to j dot a dot doe at uni dot ac dot uk now",
+            "write to [address hidden] now",
+        ),
+        // Only the parts of a name: a word and the punctuation before it
+        // are not taken along.
+        (
+            "she said: jane dot doe at uni dot edu",
+            "she said: [address hidden]",
+        ),
+        // With the domain written out, `dot` before the name is a word.
+        ("jane dot doe at uni.edu", "jane dot [address hidden]"),
+        ("the last dot doe@uni.edu", "the last dot [address hidden]"),
+    ]);
+    check_names(&[("jane dot doe at uni dot edu", "jane dot doe")]);
+}
+
+#[test]
+fn a_line_end_is_read_through_only_where_the_words_look_like_an_address() {
+    // The name holds a full stop, or stands after an opening bracket or
+    // `mailto:`, or the domain stands before a closing bracket.
+    check_text(&[
+        (
+            "Jane Doe <jane.doe at\n> uni.edu> wrote:",
+            "Jane Doe <[address hidden]\n> > wrote:",
+        ),
+        ("jane.doe at\nuni.edu", "[address hidden]\n"),
+        ("jane.doe\nat uni.edu", "[address hidden]\n"),
+        ("<jane at\n> uni.edu", "<[address hidden]\n> "),
+        ("(jane\nat uni.edu", "([address hidden]\n"),
+        ("[jane at\nuni.edu", "[[address hidden]\n"),
+        ("mailto:jane at\nuni.edu", "mailto:[address hidden]\n"),
+        ("jane at\n> uni.edu> wrote:", "[address hidden]\n> > wrote:"),
+        ("jane\nat uni.edu)", "[address hidden]\n)"),
+        ("jane at\nuni.edu]", "[address hidden]\n]"),
+    ]);
+    check_unchanged(&[
+        "I took a quick stab at\ndroplevels.data.table",
+        "I took a quick stab at\ndroplevels.data.table.",
+        "the archive at\nNabble.com.",
+        "this is the end\nat example.org we met",
+        "the meeting\n> at uni.edu was long",
+        "jane at\nuni.edu",
+        "jane\nat uni.edu",
+    ]);
+}
+
+#[test]
+fn every_lossy_separator_is_found_at_any_place_in_a_text() {
+    // Each is told apart from the rest of a text by its first characters,
+    // and those are taken from the same list as the separators themselves.
+    for separator in LOSSY_SEPARATORS {
+        for text in [
+            format!("j@ne {separator} un|-ex@mple.edu"),
+            format!("x{separator}y"),
+            format!("{separator} un|-ex@mple.edu"),
+            format!("see\nj@ne {separator}"),
+        ] {
+            let cleaned = hide_in_text(&text, LIST);
+            assert!(
+                !cleaned.contains(separator) && cleaned.contains(HIDDEN),
+                "{text:?} became {cleaned:?}"
+            );
+        }
+    }
 }

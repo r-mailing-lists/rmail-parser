@@ -123,17 +123,21 @@ A mailbox name, a separator, and a domain. The separator is one of these:
 
 | Separator | Example |
 |---|---|
-| ` at `, Mailman's text form, on one line or broken over a line end | `jane.doe at uni.edu` |
+| ` at `, Mailman's text form, on one line or, where the words look like an address, broken over a line end | `jane.doe at uni.edu` |
 | One of the source's four lossy forms: ` @end\|ng \|rom `, ` @ending from `, ` m@iii@g oii `, ` m@ili@g off ` | `j@ne.doe m@iii@g oii uni.edu` |
 | `@` | `jane.doe@uni.edu` |
 | `%40` in a link, and `%2540` in a link inside a link | `.../options/r-sig-phylo/jane.doe%40uni.edu` |
 | `(at)`, `[at]`, `<at>`, `{at}` and `--at--` in any letter case, with or without a blank on either side, and ` AT ` in capitals | `jane.doe (at) uni.edu` |
 
-A domain is a letter or a digit, followed somewhere by a full stop and then a letter, so `uni.edu`, `uni.edu.2` and `uni.__edu` are domains and `0.05`, `5.30pm` and `.Rprofile` are not. Between two of its parts it may be spelled ` dot `, ` DOT `, `(dot)` or `[dot]`. After a lossy separator anything counts as the domain, because that form has lost most full stops.
+A domain is a letter or a digit, followed somewhere by a full stop and then a letter, so `uni.edu`, `uni.edu.2` and `uni.__edu` are domains and `0.05`, `5.30pm` and `.Rprofile` are not. It ends where a lossy separator or `--at--` starts, also where no blank stands between. After a lossy separator anything counts as the domain, because that form has lost most full stops.
 
-` at ` and its spellings need a name before them and a domain after them. After `@` and `%40` a domain is hidden even when no name is read before it. A lossy separator is hidden with whatever stands on either side of it.
+A full stop of a domain may be spelled ` dot `, ` DOT `, `(dot)` or `[dot]`: `jane at uni dot edu`. The word counts only between two parts of a domain, never before its first part. Where the domain is spelled so, the name may be too, and its parts go with it: `jane dot doe at uni dot edu` is hidden as a whole, and in `jane dot doe at uni.edu` only `doe at uni.edu` is.
 
-Of an address broken over a line end, `jane.doe at` with the domain on the next line or `jane.doe` with `at uni.edu` on the next, the line end and the quote marks that start the next line stay where they are. In a link, the name ends at what a link parts its pieces with (`/ ? & = : ; |` and any escape), and the rest of the link stays.
+` at ` and its spellings need a name before them and a domain after them. So does `@`, with one exception. A `@` at the start of a line, after a blank, or after an opening bracket or quotation mark has no name before it and is not read as an address: `@loc.names` is a slot of an R object and `@name.bsky.social` a handle, and both stay. Where anything else stands directly before the sign, as the closing quotation mark does in `"jane doe"@uni.edu`, a name is there that cannot be read, and the domain is hidden. After `%40` a domain is hidden with or without a name before it. A lossy separator is hidden with whatever stands on either side of it. A domain spelled with ` dot ` is not read after a sign, written or escaped, that has no name before it.
+
+` at ` is read through a line end, `jane.doe at` with the domain on the next line or `jane.doe` with `at uni.edu` on the next, only where the words look like an address: the name has a full stop in it, or stands directly after `<`, `(`, `[` or `mailto:`, or the domain stands directly before `>`, `)` or `]`. `I took a quick stab at` with `droplevels.data.table` on the next line is none of these and stays. Of an address that is read so, the line end and the quote marks that start the next line stay where they are.
+
+In a link, the name ends at what a link parts its pieces with (`/ ? & = : ; |` and any escape), and the rest of the link stays.
 
 When a hidden address is directly followed by another separator and a domain, as in `contact me at jane.doe at uni.edu`, that goes with it.
 
@@ -145,14 +149,14 @@ When a hidden address is directly followed by another separator and a domain, as
 | `body_snippet` | Cut from the cleaned text. |
 | `from_name` | A name that is an address as a whole becomes its mailbox name: `jane at uni.edu` becomes `jane`. The name is cut at the first `+`, `=` or `%`. From a lossy form it comes without the characters that form lost: `j@ne.doe` becomes `jne.doe`. A name with an address among other words gets `[address hidden]`. A name with nothing left to show becomes `unknown`. |
 | Threads, `contributors.json` | Made from the cleaned messages, so participants, names and slugs follow. A name that `parse` takes from `--aliases` is cleaned like a `from_name`. |
-| `message_id`, `in_reply_to`, `references` | Each identifier is written as `<`, the first 32 hex characters of its SHA-256, `@hidden>`. A mail program often builds a Message-ID from the sender's mail domain, and sometimes from the mailbox name. Equal identifiers give equal hashes, so a reply still names the message it answers. In a value with several `<...>` each is hashed on its own, and words beside them are not written. An empty value stays empty. |
+| `message_id`, `in_reply_to`, `references` | Each identifier is written as `<`, the first 32 hex characters of its SHA-256, `@hidden>`. A mail program often builds a Message-ID from the sender's mail domain, and sometimes from the mailbox name. Equal identifiers give equal hashes, so a reply still names the message it answers. In a value with several `<...>` each is hashed on its own, and words beside them are not written. A value without any `<...>` is hashed as a whole. An empty value stays empty. |
 
 With `--sources`, the text is cleaned after the source page has restored it.
 
 ### What is kept on purpose
 
-- The address of an R mailing list, in every spelling: a mailbox name that starts with `r-`, with `bioc` or with the value of `--list`, whatever the case, at `r-project.org`, `stat.math.ethz.ch`, `lists.r-project.org` or `lists.r-forge.r-project.org`. A name with `+`, `=` or `%` in it is not one: a list's bounce address carries a member's address there.
-- A web address written in a sentence. What follows ` at ` starts with `www.`, or is directly followed by `/` as in `the code at github.com/user/repo`. The slash counts only when the word before ` at ` has no full stop in it and no separator stands in what follows the slash up to the next blank, or right after it.
+- The address of an R mailing list: a mailbox name that starts with `r-`, with `bioc` or with the value of `--list`, whatever the case, at `r-project.org`, `stat.math.ethz.ch`, `lists.r-project.org` or `lists.r-forge.r-project.org`. A name with a full stop, `+`, `=` or `%` in it is not one: a list's name has no full stop, and a list's bounce address carries a member's address after one of the three signs. In a link, where those signs end a name, a name that directly follows `+`, `=` or an escape is not a list's either. This holds for every separator, with one limit. After a lossy separator, name and domain are compared with `@` standing for an a, an s or a full stop and `|` for an i, an l or an f, which is how ` @end|ng |rom ` writes them. ` m@iii@g oii ` and ` m@ili@g off ` change letters in other ways as well, and a list's address that they have changed (`iists.r-project.org`) is not recognised and is hidden.
+- A web address written in a sentence. What follows ` at ` starts with `www.`, or is directly followed by `/` as in `the code at github.com/user/repo`. The slash counts only when the word before ` at ` has no full stop in it and no address stands in what follows the slash up to the next blank, or starts there: `a.b at x.org/c.d at y.org` is two addresses, and `the code at github.com/user/repo at the moment` is a sentence.
 - What follows one of fifteen ordinary words and ` at `: `look`, `looking`, `available`, `found`, `here`, `located`, `hosted`, `are`, `was`, `and`, `up`, `now`, `left`, `indexed` and `see`.
 
 The last two hold for the lower case ` at ` only, also when it is broken over a line end, and for none of its other spellings.
@@ -165,8 +169,10 @@ Anything else that reads as an address is hidden, also where it is none: `tree a
 - `from_email_hash` is not changed. It is an unsalted SHA-256 of the sender's address as the archive spells it, and it is what joins a person's messages across lists. Whoever has an address can compute its hash and look for it.
 - A sender without a display name is shown under the mailbox name, as above.
 - `jane@localhost` and `jane at 192.168.1.1` stay: a host without a full stop and a bare IP address are not read as domains.
+- `@word.word` with no name before the sign stays, as said above.
+- Words on two lines that do not look like an address stay, as said above.
 - Other spellings are not read: ` at ` with a tab or with two blanks around it, an HTML entity for the sign, and any spelling not listed above.
-- The flag is on `parse` only. `stats --aliases` and `aggregate --aliases` write the names of the alias file as the file has them.
+- The flag is on `parse` only. `stats --aliases` and `aggregate --aliases` write the names of the alias file as the file has them. The `sources` subcommand writes Message-IDs as the source has them into the `rejected` entries of `sources/*.json`.
 
 ## Development
 
