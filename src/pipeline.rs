@@ -489,7 +489,8 @@ impl StatsAccumulator {
 ///   with no `sources/` file, the output is what it always was.
 /// - If `attachments` is given as a directory of files written by the
 ///   `attachments` subcommand, the text Mailman scrubbed out of a message
-///   is put back where its notice is, and the snippet is made again. A
+///   is put back where its notice is, with `\n` line ends, the body is
+///   trimmed as `parse_message` trims it, and the snippet is made again. A
 ///   message whose notices find no stored text is left as it is.
 /// - If `hide_addresses` is true, each message is cleaned by
 ///   `addresses::hide_in_message` before anything is made from it, which
@@ -575,6 +576,9 @@ pub fn run_parse(
                 if let Some(store) = &period_attachments {
                     let (body, restored) = attachments::restore(&msg.body_plain, store);
                     if restored > 0 {
+                        // Trimmed as `parse_message` trims every body, since
+                        // the text may begin or end with blank lines.
+                        let body = body.trim().to_string();
                         msg.body_snippet = make_snippet(&body);
                         msg.body_plain = body;
                     }

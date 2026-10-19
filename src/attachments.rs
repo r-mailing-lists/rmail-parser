@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
@@ -68,12 +69,24 @@ fn address_regex() -> &'static Regex {
 
 /// Writes every `local@domain` as `local at domain`, the way Mailman's
 /// archiver writes addresses in the text it keeps. The scrubbed files skip
-/// that step, so restored text goes through here. Text without such an `@`
-/// comes back unchanged, and a second pass changes nothing.
+/// that step, so restored text goes through here. The rule is applied again
+/// until the text stops changing, so a chain such as `a@b@c` comes out as
+/// `a at b at c` in one call. Text without such an `@` comes back unchanged,
+/// and a second call changes nothing.
 pub fn obscure_addresses(text: &str) -> String {
-    address_regex()
-        .replace_all(text, "${1} at ${2}")
-        .into_owned()
+    let mut text = text.to_string();
+    // Each pass that changes anything takes out at least one `@`, so this
+    // ends.
+    while let Cow::Owned(next) = address_regex().replace_all(&text, "${1} at ${2}") {
+        text = next;
+    }
+    text
+}
+
+/// `text` with every `\r\n`, and every `\r` on its own, made `\n`, the
+/// line end of every other body in the archive.
+fn lf_line_ends(text: &str) -> String {
+    text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
 /// Finds the notices whose part has no name and whose URL points at a file
@@ -108,10 +121,11 @@ pub fn find_scrubbed(text: &str) -> Vec<Scrubbed> {
 
 /// Puts the stored text where each notice is. A notice is replaced when its
 /// key is stored with a text that is not blank and the stored URL is the
-/// notice's own (http and https alike); the text goes in with its trailing
-/// whitespace trimmed and its addresses written as `user at domain` (see
-/// `obscure_addresses`). Everything else stays as it was. Returns the new body
-/// and how many notices were replaced.
+/// notice's own (http and https alike); the text goes in with its addresses
+/// written as `user at domain` (see `obscure_addresses`), its line ends made
+/// `\n` and its trailing whitespace trimmed. Everything else stays as it was.
+/// Returns the new body and how many notices were replaced. The body is not
+/// trimmed here: the caller trims it as `parse_message` trims every body.
 pub fn restore(body: &str, store: &PeriodAttachments) -> (String, usize) {
     let mut out = String::with_capacity(body.len());
     let mut last = 0;
@@ -125,7 +139,7 @@ pub fn restore(body: &str, store: &PeriodAttachments) -> (String, usize) {
             continue;
         };
         out.push_str(&body[last..s.start]);
-        out.push_str(obscure_addresses(text).trim_end());
+        out.push_str(lf_line_ends(&obscure_addresses(text)).trim_end());
         last = s.end;
         count += 1;
     }

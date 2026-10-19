@@ -271,3 +271,28 @@ fn restore_obscures_what_it_inserts() {
     assert_eq!(count, 1);
     assert_eq!(out, "Mail al.smith at example.org\nafter");
 }
+
+#[test]
+fn obscures_a_chain_of_at_signs_in_one_call() {
+    assert_eq!(obscure_addresses("x a@b@c y"), "x a at b at c y");
+}
+
+#[test]
+fn restored_text_has_lf_line_ends() {
+    let store = stored(&[(KEY, with_text(NEW_URL, "one\r\ntwo\rthree\r\n"))]);
+    let (out, n) = restore(&new_form("\n"), &store);
+    assert_eq!(n, 1);
+    assert_eq!(out, "one\ntwo\nthree\nafter");
+}
+
+#[test]
+fn a_notice_that_climbs_out_of_the_archive_is_not_restored() {
+    let climbing = NEW_URL.replace(
+        "/r-help/attachments/",
+        "/r-help/attachments/../../other/attachments/",
+    );
+    let body = format!("{NOTICE}\nName: not available\nURL: <{climbing}>\nend");
+    assert_eq!(find_scrubbed(&body)[0].key, KEY);
+    let store = stored(&[(KEY, with_text(NEW_URL, "Hello"))]);
+    assert_eq!(restore(&body, &store), (body.clone(), 0));
+}

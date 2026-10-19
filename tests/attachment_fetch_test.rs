@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use common::{raw_message, scratch_dir, scrubbed_notice, FakeAttachments, BASE};
 use rmail_parser::attachment_fetch::{run_attachments, AttachmentsOptions, AttachmentsReport};
 use rmail_parser::attachments;
+use rmail_parser::source_fetch::not_the_file;
 
 fn url(rest: &str) -> String {
     format!("{}/attachments/{}", BASE, rest)
@@ -295,4 +296,297 @@ fn the_store_holds_no_whole_address() {
         .read_to_string(&mut json)
         .unwrap();
     assert!(!json.contains("@example.org"));
+}
+
+/// `n` notice URLs of the right shape, all different, in one period.
+fn many(n: usize) -> Vec<String> {
+    (1..=n)
+        .map(|i| url(&format!("{:08}/75317b7f/attachment.txt", 20100000 + i)))
+        .collect()
+}
+
+fn not_found_entries(p: &attachments::PeriodAttachments) -> usize {
+    p.files
+        .values()
+        .filter(|f| f.status.as_deref() == Some("not found"))
+        .count()
+}
+
+#[test]
+fn ten_not_found_in_a_row_stop_the_run_and_record_nothing() {
+    let urls = many(11);
+    let raw = raw_dir("att-ten-404-raw", &[("2010-February", &urls)]);
+    let out = scratch_dir("att-ten-404-out");
+    // Serves nothing: every request is a 404, as from a source that has
+    // moved its files or turned us away.
+    let mut source = FakeAttachments::new();
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked.len(), 10);
+    assert_eq!(
+        report.stopped.as_deref(),
+        Some("10 requests in a row failed")
+    );
+    assert_eq!(report.not_found, 0);
+    assert_eq!(report.failed, 10);
+    assert_eq!(report.left, 11);
+    assert!(attachments::load(&out, "2010-February").unwrap().is_none());
+
+    // So the next run asks for every one of them again.
+    let mut again = FakeAttachments::new();
+    for u in &urls {
+        again.serve(u, b"back");
+    }
+    let report = run(&raw, &out, &mut again);
+    assert_eq!(again.asked.len(), 11);
+    assert_eq!(report.fetched, 11);
+}
+
+#[test]
+fn nine_not_found_then_a_file_are_recorded_and_the_run_goes_on() {
+    let urls = many(11);
+    let raw = raw_dir("att-nine-404-raw", &[("2010-February", &urls)]);
+    let out = scratch_dir("att-nine-404-out");
+    let mut source = FakeAttachments::new();
+    source.serve(&urls[9], b"found");
+    source.serve(&urls[10], b"found too");
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked.len(), 11);
+    assert_eq!(report.stopped, None);
+    assert_eq!(report.not_found, 9);
+    assert_eq!(report.fetched, 2);
+    assert_eq!(report.left, 0);
+    let feb = attachments::load(&out, "2010-February").unwrap().unwrap();
+    assert_eq!(not_found_entries(&feb), 9);
+    assert_eq!(feb.files.len(), 11);
+}
+
+#[test]
+fn a_file_starts_the_count_of_not_found_again() {
+    let urls = many(20);
+    let raw = raw_dir("att-reset-raw", &[("2010-February", &urls)]);
+    let out = scratch_dir("att-reset-out");
+    let mut source = FakeAttachments::new();
+    source.serve(&urls[9], b"one");
+    source.serve(&urls[19], b"two");
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked.len(), 20);
+    assert_eq!(report.stopped, None);
+    assert_eq!(report.not_found, 18);
+    assert_eq!(report.fetched, 2);
+}
+
+#[test]
+fn a_run_of_not_found_across_two_periods_is_forgotten_in_both() {
+    let march: Vec<String> = (1..=6)
+        .map(|i| url(&format!("200503{:02}/aaaaaaaa/attachment.txt", i)))
+        .collect();
+    let feb = many(6);
+    let raw = raw_dir(
+        "att-across-raw",
+        &[("2005-March", &march), ("2010-February", &feb)],
+    );
+    let out = scratch_dir("att-across-out");
+    let mut source = FakeAttachments::new();
+    // March, taken first, starts with a file; its five 404s are written with
+    // it when the period is done, before the run of 404s ends in February.
+    source.serve(&march[0], b"kept");
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked.len(), 11);
+    assert_eq!(
+        report.stopped.as_deref(),
+        Some("10 requests in a row failed")
+    );
+    assert_eq!(report.fetched, 1);
+    assert_eq!(report.not_found, 0);
+    assert_eq!(report.left, 11);
+    let stored_march = attachments::load(&out, "2005-March").unwrap().unwrap();
+    assert_eq!(stored_march.files.len(), 1);
+    assert_eq!(
+        stored_march.files["20050301/aaaaaaaa/attachment.txt"]
+            .text
+            .as_deref(),
+        Some("kept")
+    );
+    assert!(attachments::load(&out, "2010-February").unwrap().is_none());
+}
+
+#[test]
+fn a_period_file_that_held_only_forgotten_not_found_is_removed() {
+    let march: Vec<String> = (1..=5)
+        .map(|i| url(&format!("200503{:02}/aaaaaaaa/attachment.txt", i)))
+        .collect();
+    let raw = raw_dir(
+        "att-emptied-raw",
+        &[("2005-March", &march), ("2010-February", &many(5))],
+    );
+    let out = scratch_dir("att-emptied-out");
+    let mut source = FakeAttachments::new();
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked.len(), 10);
+    assert!(report.stopped.is_some());
+    assert_eq!(fs::read_dir(&out).unwrap().count(), 0);
+}
+
+#[test]
+fn a_run_of_not_found_already_written_mid_period_is_taken_out() {
+    // A period's file is written every 50 new entries: here after 45 files
+    // and the first five of the 404s.
+    let urls = many(56);
+    let raw = raw_dir("att-midsave-raw", &[("2010-February", &urls)]);
+    let out = scratch_dir("att-midsave-out");
+    let mut source = FakeAttachments::new();
+    for u in &urls[..45] {
+        source.serve(u, b"x");
+    }
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked.len(), 55);
+    assert!(report.stopped.is_some());
+    assert_eq!(report.fetched, 45);
+    assert_eq!(report.left, 11);
+    let feb = attachments::load(&out, "2010-February").unwrap().unwrap();
+    assert_eq!(feb.files.len(), 45);
+    assert_eq!(not_found_entries(&feb), 0);
+}
+
+#[test]
+fn the_store_keeps_the_text_as_fetched() {
+    let raw = raw_dir("att-crlf-raw", &[("2010-February", &[url(B)])]);
+    let out = scratch_dir("att-crlf-out");
+    let mut source = FakeAttachments::new();
+    source.serve(&url(B), b"one\r\ntwo\r\n");
+
+    run(&raw, &out, &mut source);
+
+    let feb = attachments::load(&out, "2010-February").unwrap().unwrap();
+    assert_eq!(feb.files[B].text.as_deref(), Some("one\r\ntwo\r\n"));
+}
+
+#[test]
+fn a_url_that_climbs_out_of_the_archive_is_refused() {
+    let climbing = format!("{}/attachments/../../other/attachments/{}", BASE, B);
+    let raw = raw_dir("att-climb-raw", &[("2010-February", &[climbing])]);
+    let out = scratch_dir("att-climb-out");
+    let mut source = FakeAttachments::new();
+
+    let report = run(&raw, &out, &mut source);
+
+    assert!(source.asked.is_empty(), "{:?}", source.asked);
+    assert_eq!(report.found, 1);
+    assert_eq!(report.refused, 1);
+    assert_eq!(report.left, 0);
+    assert!(attachments::load(&out, "2010-February").unwrap().is_none());
+}
+
+#[test]
+fn a_nested_attachments_url_is_refused() {
+    let nested = format!("{}/attachments/x/attachments/{}", BASE, B);
+    let raw = raw_dir("att-nested-raw", &[("2010-February", &[nested])]);
+    let out = scratch_dir("att-nested-out");
+    let mut source = FakeAttachments::new();
+
+    let report = run(&raw, &out, &mut source);
+
+    assert!(source.asked.is_empty(), "{:?}", source.asked);
+    assert_eq!(report.refused, 1);
+}
+
+#[test]
+fn a_url_of_the_wrong_shape_is_not_found_at_all() {
+    let wrong = [
+        url("20100210/75317B7F/attachment.pl"),
+        url("2010021/75317b7f/attachment.pl"),
+    ];
+    let raw = raw_dir("att-shape-raw", &[("2010-February", &wrong)]);
+    let out = scratch_dir("att-shape-out");
+    let mut source = FakeAttachments::new();
+
+    let report = run(&raw, &out, &mut source);
+
+    assert!(source.asked.is_empty());
+    assert_eq!(report.periods, 1);
+    assert_eq!(report.found, 0);
+    assert_eq!(report.refused, 0);
+}
+
+#[test]
+fn a_refused_notice_does_not_hide_a_real_one_with_its_key() {
+    let climbing = format!("{}/attachments/../../other/attachments/{}", BASE, B);
+    let raw = raw_dir(
+        "att-same-key-raw",
+        &[("2010-February", &[climbing, url(B)])],
+    );
+    let out = scratch_dir("att-same-key-out");
+    let mut source = FakeAttachments::new();
+    source.serve(&url(B), b"the real one");
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked, [url(B)]);
+    assert_eq!(report.found, 2);
+    assert_eq!(report.refused, 1);
+    assert_eq!(report.fetched, 1);
+    let feb = attachments::load(&out, "2010-February").unwrap().unwrap();
+    assert_eq!(feb.files[B].url, url(B));
+    assert_eq!(feb.files[B].text.as_deref(), Some("the real one"));
+}
+
+// What the real fetcher takes for the file it asked for. It cannot be faked,
+// so its rule is tested on its own.
+
+const ASKED: &str =
+    "https://lists.example.org/pipermail/r-devel/attachments/20100210/75317b7f/attachment.pl";
+
+#[test]
+fn an_answer_from_the_url_asked_for_is_the_file() {
+    for content_type in [
+        "text/plain",
+        "text/plain; charset=us-ascii",
+        "application/octet-stream",
+        "",
+    ] {
+        assert_eq!(
+            not_the_file(ASKED, ASKED, content_type),
+            None,
+            "{content_type}"
+        );
+    }
+}
+
+#[test]
+fn a_redirect_is_not_the_file() {
+    let elsewhere = "https://lists.example.org/pipermail/r-devel/";
+    let why = not_the_file(ASKED, elsewhere, "text/plain").unwrap();
+    assert!(why.contains(elsewhere), "{why}");
+}
+
+#[test]
+fn an_html_page_for_a_file_that_is_not_one_is_not_the_file() {
+    for content_type in [
+        "text/html",
+        "text/html; charset=utf-8",
+        "Text/HTML ; charset=x",
+    ] {
+        assert!(
+            not_the_file(ASKED, ASKED, content_type).is_some(),
+            "{content_type}"
+        );
+    }
+    for asked in [
+        ASKED.replace("attachment.pl", "attachment.html"),
+        ASKED.replace("attachment.pl", "attachment.htm"),
+    ] {
+        assert_eq!(not_the_file(&asked, &asked, "text/html"), None, "{asked}");
+    }
 }

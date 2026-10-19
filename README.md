@@ -115,11 +115,11 @@ rmail-parser attachments --raw raw/ --out attachments/ \
 |---|---|---|
 | `--raw` | required | Directory of raw `.mbox` files. |
 | `--out` | required | Directory the per-period files are written to. |
-| `--base-url` | required | The list's archive at the source. Only addresses under `<base-url>/attachments/` are fetched, over the scheme of the base URL. |
+| `--base-url` | required | The list's archive at the source. Only addresses exactly under `<base-url>/attachments/` are fetched, over the scheme of the base URL. |
 | `--max-requests` | 3000 | Requests one run may make. |
 | `--delay-ms` | 1000 | Pause between requests, in milliseconds. |
 
-Only notices at the start of a line, followed by `Name: not available` and an address of the form `YYYYMMDD/xxxxxxxx/attachment.ext`, count. Periods are taken oldest first. Text is stored as UTF-8; bytes that are not valid UTF-8 are read as Windows-1252, and the file records which. Addresses in the text are stored as `user at domain`, as Mailman writes them in its own archive. A 404 is recorded as `"not found"` and a file over 1 MiB as `"too large"`, and neither is asked for again. A failed request records nothing and is asked for again on a later run. The run stops after 10 failures in a row, prints `warning: <reason>` and still exits 0. The report is printed one count per line.
+Only notices at the start of a line, followed by `Name: not available` and an address of the form `YYYYMMDD/xxxxxxxx/attachment.ext`, count, and only those whose address is exactly `<base-url>/attachments/` followed by that path are fetched: an address with anything between the two, such as `../`, is refused and never asked for. Periods are taken oldest first. Text is stored as UTF-8, as it was fetched; bytes that are not valid UTF-8 are read as Windows-1252, and the file records which. Addresses in the text are stored as `user at domain`, as Mailman writes them in its own archive. A 404 is recorded as `"not found"` and a file over 1 MiB as `"too large"`, and neither is asked for again. A failed request records nothing and is asked for again on a later run, and so does an answer that is not the file: one that came by a redirect, or an HTML page for an address that does not end in `.html` or `.htm`. The run stops after 10 failures in a row, a 404 counting as one and a file that arrives starting the count again, and the 404s among those ten are not stored: a source that has moved its files answers 404 to everything, so they are asked for again on a later run. A run that stops early prints `warning: <reason>` and still exits 0. The report is printed one count per line.
 
 ### `parse --sources`
 
@@ -137,7 +137,7 @@ rmail-parser parse --input raw/ --output processed/ --list r-devel \
     --attachments attachments/
 ```
 
-Each notice that Mailman left where it scrubbed a text is replaced by the text `attachments` stored for it, trailing whitespace trimmed and its addresses written as `user at domain`, and the snippet is made again. A notice stays when its file is not stored, was recorded as `"not found"` or `"too large"`, holds only whitespace, or was fetched from another URL. Without the flag, or for a raw file with no `attachments/` file, the output is what it has always been. A damaged `attachments/` file stops the run and is named. With `--hide-addresses`, the restored text is cleaned too.
+Each notice that Mailman left where it scrubbed a text is replaced by the text `attachments` stored for it, with its addresses written as `user at domain`, its line ends made `\n` and its trailing whitespace trimmed. The body is then trimmed as every body is, and the snippet is made again. A notice stays when its file is not stored, was recorded as `"not found"` or `"too large"`, holds only whitespace, or was fetched from another URL. Without the flag, or for a raw file with no `attachments/` file, the output is what it has always been. A damaged `attachments/` file stops the run and is named. With `--hide-addresses`, the restored text is cleaned too.
 
 ## Hiding addresses
 

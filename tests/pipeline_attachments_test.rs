@@ -150,3 +150,13 @@ fn restored_bodies_hold_no_whole_address() {
         .body_plain
         .contains("al.smith at example.org"));
 }
+
+#[test]
+fn a_restored_body_is_cleaned_like_any_other() {
+    let raw = raw_dir("clean-raw");
+    let store = store_with("clean-store", "\n\n  \nFirst words.\r\nSecond line.\r\n");
+    let out = parse(&raw, "clean-out", false, Some(&store));
+    let msg = first_message(&out);
+    assert_eq!(msg.body_plain, "First words.\nSecond line.");
+    assert_eq!(msg.body_snippet, "First words.\nSecond line.");
+}
