@@ -1,4 +1,5 @@
 pub mod addresses;
+pub mod attachments;
 pub mod mbox;
 pub mod message;
 pub mod output;
