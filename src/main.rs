@@ -4,6 +4,7 @@ use std::path::Path;
 use clap::{Parser, Subcommand};
 
 use rmail_parser::message::{deobfuscate_email, extract_email_for_hash, hash_email};
+use rmail_parser::attachment_fetch::{self, AttachmentsOptions, AttachmentsReport};
 use rmail_parser::pipeline;
 use rmail_parser::source_fetch::{self, HttpFetcher, SourcesOptions, SourcesReport};
 
@@ -44,6 +45,27 @@ enum Commands {
         /// Hide mailbox addresses in names, subjects and text, and write Message-IDs as hashes (for a list whose archive only its members can read)
         #[arg(long, default_value_t = false)]
         hide_addresses: bool,
+        /// Directory of attachments/ files written by `attachments`; the text Mailman scrubbed is put back into the bodies
+        #[arg(long)]
+        attachments: Option<String>,
+    },
+    /// Fetch the text Mailman scrubbed out of messages into attachments/ files
+    Attachments {
+        /// Directory of raw .mbox files
+        #[arg(long)]
+        raw: String,
+        /// Output directory for the per-period attachments files
+        #[arg(long)]
+        out: String,
+        /// The list's archive at the source (e.g. "https://stat.ethz.ch/pipermail/r-devel/")
+        #[arg(long)]
+        base_url: String,
+        /// Stop after this many requests
+        #[arg(long, default_value_t = 3000)]
+        max_requests: usize,
+        /// Pause between requests, in milliseconds
+        #[arg(long, default_value_t = 1000)]
+        delay_ms: u64,
     },
     /// Fetch the source's index and message pages into sources/ files
     Sources {
@@ -113,6 +135,7 @@ fn main() {
             sources,
             base_url,
             hide_addresses,
+            attachments,
         } => {
             // clap has already made sure the two come together.
             let source_pages = match (&sources, &base_url) {
@@ -127,7 +150,29 @@ fn main() {
                 aliases.as_deref().map(Path::new),
                 source_pages,
                 hide_addresses,
+                attachments.as_deref().map(Path::new),
             )
+        }
+        Commands::Attachments {
+            raw,
+            out,
+            base_url,
+            max_requests,
+            delay_ms,
+        } => {
+            let opts = AttachmentsOptions {
+                max_requests,
+                ..AttachmentsOptions::default()
+            };
+            let mut fetcher = HttpFetcher::new(delay_ms);
+            attachment_fetch::run_attachments(
+                Path::new(&raw),
+                Path::new(&out),
+                &base_url,
+                &opts,
+                &mut fetcher,
+            )
+            .map(|report| print_attachments_report(&report))
         }
         Commands::Sources {
             raw,
@@ -181,6 +226,24 @@ fn main() {
     if let Err(e) = result {
         eprintln!("Error: {:#}", e);
         std::process::exit(1);
+    }
+}
+
+/// Prints what an `attachments` run did, one count per line. A run that
+/// stopped early says so and still succeeds: the next run carries on.
+fn print_attachments_report(report: &AttachmentsReport) {
+    eprintln!("Periods looked at:    {}", report.periods);
+    eprintln!("Notices found:        {}", report.found);
+    eprintln!("Stored before:        {}", report.stored_before);
+    eprintln!("Fetched:              {}", report.fetched);
+    eprintln!("Not found:            {}", report.not_found);
+    eprintln!("Too large:            {}", report.too_large);
+    eprintln!("Failed:               {}", report.failed);
+    eprintln!("Outside the archive:  {}", report.refused);
+    eprintln!("Left:                 {}", report.left);
+    eprintln!("Source checks:        {}", report.probes);
+    if let Some(reason) = &report.stopped {
+        eprintln!("warning: {}", reason);
     }
 }
 

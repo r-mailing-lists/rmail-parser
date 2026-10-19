@@ -1,5 +1,9 @@
+mod common;
+
 use std::path::Path;
 use std::process::{Command, Output};
+
+use common::{raw_message, scratch_dir, scrubbed_notice};
 
 fn rmail_parser(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rmail-parser"))
@@ -304,4 +308,46 @@ fn test_sources_prints_each_count_on_its_own_line() {
         assert!(stderr.contains(line), "{line:?} missing from:\n{stderr}");
     }
     std::fs::remove_dir_all(&out).unwrap();
+}
+
+#[test]
+fn test_attachments_that_stops_early_prints_a_warning_and_exits_zero() {
+    let raw = scratch_dir("cli-attachments-raw");
+    let out = scratch_dir("cli-attachments-out");
+    std::fs::write(
+        raw.join("2010-February.mbox"),
+        raw_message(
+            1,
+            "A subject",
+            &scrubbed_notice(
+                "https://lists.example.org/pipermail/r-devel/attachments/20100210/75317b7f/attachment.pl",
+            ),
+        ),
+    )
+    .unwrap();
+
+    // A budget of zero stops the run before its first request, so this
+    // exercises the real fetcher's wiring without sending anything.
+    let run = rmail_parser(&[
+        "attachments",
+        "--raw",
+        raw.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+        "--base-url",
+        "https://lists.example.org/pipermail/r-devel/",
+        "--max-requests",
+        "0",
+    ]);
+
+    assert!(run.status.success());
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(
+        stderr.lines().any(|l| l.starts_with("warning: ")),
+        "{stderr}"
+    );
+    assert!(stderr.contains("Notices found:        1\n"), "{stderr}");
+    assert!(stderr.contains("Left:                 1\n"), "{stderr}");
+    assert!(stderr.contains("Source checks:        0\n"), "{stderr}");
+    assert_eq!(std::fs::read_dir(&out).unwrap().count(), 0);
 }

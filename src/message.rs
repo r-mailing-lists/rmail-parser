@@ -48,6 +48,8 @@ pub struct Message {
     pub month: String,                 // "YYYY-MM" from date
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,    // the message's own page at the source, when known
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub restored_from: Vec<String>,    // stored URLs of the texts restored into the body, in order
 }
 
 /// Reverses Mailman's pipermail email obfuscation.
@@ -256,6 +258,7 @@ pub fn parse_message(raw: &str) -> Result<Message> {
         thread_depth: 0,
         month,
         source_url: None,
+        restored_from: Vec::new(),
     })
 }
 

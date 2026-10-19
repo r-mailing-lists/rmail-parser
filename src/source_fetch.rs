@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::io::Read;
 use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -31,6 +32,25 @@ pub enum Fetched {
     NotFound,
 }
 
+/// Why an answer with a 200 is not the file at `asked`, if it is not. A
+/// server that has moved its files or turns a client away often says so
+/// with a redirect to another page, or with an HTML page and a 200, and
+/// neither is the file. So an answer that came from another URL than the
+/// one asked for (`final_url`, after any redirect) is not the file, and nor
+/// is a `text/html` answer for a URL that does not end in `.html` or `.htm`.
+pub fn not_the_file(asked: &str, final_url: &str, content_type: &str) -> Option<String> {
+    if final_url != asked {
+        return Some(format!("redirected to {}", final_url));
+    }
+    let mime = content_type.split(';').next().unwrap_or("").trim();
+    let path = asked.to_ascii_lowercase();
+    if mime.eq_ignore_ascii_case("text/html") && !path.ends_with(".html") && !path.ends_with(".htm")
+    {
+        return Some("an HTML page, not the file".to_string());
+    }
+    None
+}
+
 /// The one way out to the source. Everything above it is tested against
 /// saved pages through this trait, with no network.
 pub trait Fetcher {
@@ -57,16 +77,61 @@ impl HttpFetcher {
             last_request: None,
         }
     }
-}
 
-impl Fetcher for HttpFetcher {
-    fn get(&mut self, url: &str) -> anyhow::Result<Fetched> {
+    /// Waits until the pause since the last request is over.
+    fn pause(&self) {
         if let Some(last) = self.last_request {
             let since = last.elapsed();
             if since < self.delay {
                 thread::sleep(self.delay - since);
             }
         }
+    }
+
+    /// Fetches `url` as bytes, with the same pause between requests as
+    /// `get`. `Ok(None)` is HTTP 404; any other failure is an error, and so
+    /// is an answer that is not the file asked for (see `not_the_file`).
+    pub fn get_bytes(&mut self, url: &str) -> anyhow::Result<Option<Vec<u8>>> {
+        self.pause();
+        let request = self.agent.get(url);
+        // The URL as the client writes it, which is how it reports where the
+        // answer came from, so only a redirect makes the two differ.
+        let asked = request
+            .request_url()
+            .map(|parsed| parsed.as_url().as_str().to_string())
+            .unwrap_or_else(|_| url.to_string());
+        let result = request.call();
+        self.last_request = Some(Instant::now());
+        match result {
+            Ok(response) => {
+                let content_type = response.header("content-type").unwrap_or("");
+                if let Some(why) = not_the_file(&asked, response.get_url(), content_type) {
+                    return Err(anyhow!("{}", why));
+                }
+                let mut bytes = Vec::new();
+                response
+                    .into_reader()
+                    .read_to_end(&mut bytes)
+                    .map_err(|e| anyhow!("could not read the response: {}", e))?;
+                Ok(Some(bytes))
+            }
+            // A 404 at the end of a redirect says nothing about the file
+            // asked for. The page of a 404 is HTML, so only the URL counts.
+            Err(ureq::Error::Status(404, response)) => {
+                match not_the_file(&asked, response.get_url(), "") {
+                    Some(why) => Err(anyhow!("HTTP 404, {}", why)),
+                    None => Ok(None),
+                }
+            }
+            Err(ureq::Error::Status(code, _)) => Err(anyhow!("HTTP {}", code)),
+            Err(e) => Err(anyhow!("{}", e)),
+        }
+    }
+}
+
+impl Fetcher for HttpFetcher {
+    fn get(&mut self, url: &str) -> anyhow::Result<Fetched> {
+        self.pause();
         let result = self.agent.get(url).call();
         self.last_request = Some(Instant::now());
         match result {

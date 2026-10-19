@@ -9,6 +9,7 @@ use rayon::prelude::*;
 use serde::Deserialize;
 
 use crate::addresses;
+use crate::attachments;
 use crate::mbox::split_mbox;
 use crate::message::{make_snippet, parse_message, Message};
 use crate::output::{
@@ -486,6 +487,11 @@ impl StatsAccumulator {
 ///   URL at the source, each message with a known page gets its `source_url`
 ///   and the characters that page restores. Without it, or for a raw file
 ///   with no `sources/` file, the output is what it always was.
+/// - If `attachments` is given as a directory of files written by the
+///   `attachments` subcommand, the text Mailman scrubbed out of a message
+///   is put back where its notice is, with `\n` line ends, the body is
+///   trimmed as `parse_message` trims it, and the snippet is made again. A
+///   message whose notices find no stored text is left as it is.
 /// - If `hide_addresses` is true, each message is cleaned by
 ///   `addresses::hide_in_message` before anything is made from it, which
 ///   hides the addresses that module can read, and its Message-ID and the
@@ -500,6 +506,7 @@ pub fn run_parse(
     aliases_path: Option<&Path>,
     source_pages: Option<(&Path, &str)>,
     hide_addresses: bool,
+    attachments: Option<&Path>,
 ) -> Result<()> {
     let files = discover_mbox_files(input)?;
 
@@ -537,6 +544,11 @@ pub fn run_parse(
             None => None,
         };
 
+        let period_attachments = match attachments {
+            Some(dir) => attachments::load(dir, &sources::period_of(file_path))?,
+            None => None,
+        };
+
         // Parse messages in parallel using rayon. A message that fails keeps
         // its slot as `None`: sources/ counts messages by their position in
         // the raw file, so dropping one here would shift every later link.
@@ -560,6 +572,17 @@ pub fn run_parse(
             if let Some(mut msg) = slot {
                 if let (Some(period), Some((_, base_url))) = (&period_sources, source_pages) {
                     apply_source(&mut msg, period, position, base_url);
+                }
+                if let Some(store) = &period_attachments {
+                    let (body, restored) = attachments::restore(&msg.body_plain, store);
+                    if !restored.is_empty() {
+                        // Trimmed as `parse_message` trims every body, since
+                        // the text may begin or end with blank lines.
+                        let body = body.trim().to_string();
+                        msg.body_snippet = make_snippet(&body);
+                        msg.body_plain = body;
+                        msg.restored_from = restored;
+                    }
                 }
                 // After the page has restored the text, so that an address
                 // it completed is hidden too, and before anything is made

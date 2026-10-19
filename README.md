@@ -20,6 +20,7 @@ Or build it from a checkout with `cargo build --release`.
 |---|---|
 | `parse` | Parses raw `.mbox` files into one JSON file per month, with stats unless `--no-stats` is given. |
 | `sources` | Fetches the source's index and message pages and records them in `sources/` files. |
+| `attachments` | Fetches the text Mailman scrubbed out of messages and records it in `attachments/` files. |
 | `stats` | Regenerates the stats files from already-parsed JSON. |
 | `aggregate` | Merges per-list `contributors.json` files into one. |
 | `hash-email` | Prints the de-obfuscated form and the hash of an email address. |
@@ -100,6 +101,26 @@ A run limited by `--max-periods` does not look at older periods again. After a c
 
 The command makes one request at a time, identifies itself as `rmail-parser (+https://github.com/r-mailing-lists)`, and stops when its budget is spent or three requests in a row fail. A request the source answers with "not found" counts as a failed one, and neither is ever written down: the period or the message is left as it was and asked for again on the next run. Stopping early is not an error: the command exits 0, every file it wrote is valid, and the next run picks up what is missing. A character is restored only when the source's own page has it. Nothing is guessed.
 
+### `attachments`
+
+Where Mailman scrubbed an unnamed text out of a message, it left a notice with the address of the file. This command fetches those files into one `attachments/<period>.json.gz` per raw file.
+
+```bash
+rmail-parser attachments --raw raw/ --out attachments/ \
+    --base-url https://stat.ethz.ch/pipermail/r-devel/ \
+    --max-requests 3000 --delay-ms 1000
+```
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--raw` | required | Directory of raw `.mbox` files. |
+| `--out` | required | Directory the per-period files are written to. |
+| `--base-url` | required | The list's archive at the source. Only addresses exactly under `<base-url>/attachments/` are fetched, over the scheme of the base URL. |
+| `--max-requests` | 3000 | Requests one run may make. |
+| `--delay-ms` | 1000 | Pause between requests, in milliseconds. |
+
+Only notices at the start of a line, followed by `Name: not available` and an address of the form `YYYYMMDD/xxxxxxxx/attachment.ext`, count, and only those whose address is exactly `<base-url>/attachments/` followed by that path are fetched: an address with anything between the two, such as `../`, is refused and never asked for. Periods are taken oldest first. Text is stored as UTF-8, as it was fetched; bytes that are not valid UTF-8 are read as Windows-1252, and the file records which. Addresses in the text are stored as `user at domain`, as Mailman writes them in its own archive. A 404 is recorded as `"not found"` and a file over 1 MiB as `"too large"`, and neither is asked for again. A failed request records nothing and is asked for again on a later run, and so does an answer that is not the file: one that came by a redirect, or an HTML page for an address that does not end in `.html` or `.htm`. The run stops after 10 failures in a row, a 404 counting as one and a file that arrives starting the count again. A source that has moved its files answers 404 to everything, so when all ten are 404s the run first asks once more for a file known to be there: the last one it fetched with its text, or else one stored with its text in a period it has loaded. If that file comes, the source is there: the ten stay recorded as `"not found"` and the run goes on. If it does not come, if no file is known, or if an error is among the ten, the run stops and the 404s among them are not stored, so they are asked for again on a later run. That request counts toward `--max-requests`, prints `source checked after 10 not found in a row: it answers` (or `it does not answer`), and is counted in the report as `Source checks`. A run that stops early prints `warning: <reason>` and still exits 0. The report is printed one count per line.
+
 ### `parse --sources`
 
 ```bash
@@ -108,6 +129,15 @@ rmail-parser parse --input raw/ --output processed/ --list r-devel \
 ```
 
 `--sources` and `--base-url` must be given together. Each message with a known page gains a `source_url` of the form `<base-url>/<period>/<number>.html`, and its body and snippet carry the restored characters. Without the two flags, or for a raw file that has no `sources/` file, the output is what it has always been and has no `source_url` field.
+
+### `parse --attachments`
+
+```bash
+rmail-parser parse --input raw/ --output processed/ --list r-devel \
+    --attachments attachments/
+```
+
+Each notice that Mailman left where it scrubbed a text is replaced by the text `attachments` stored for it, with its addresses written as `user at domain`, its line ends made `\n` and its trailing whitespace trimmed. The body is then trimmed as every body is, and the snippet is made again. The message gains `restored_from`: the stored URL of each text put into it, in the order of the body. A message nothing was restored into has no `restored_from` field. A notice stays when its file is not stored, was recorded as `"not found"` or `"too large"`, holds only whitespace, or was fetched from another URL. Without the flag, or for a raw file with no `attachments/` file, the output is what it has always been. A damaged `attachments/` file stops the run and is named. With `--hide-addresses`, the restored text is cleaned too.
 
 ## Hiding addresses
 
