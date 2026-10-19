@@ -91,6 +91,32 @@ pub fn find_scrubbed(text: &str) -> Vec<Scrubbed> {
         .collect()
 }
 
+/// Puts the stored text where each notice is. A notice is replaced when its
+/// key is stored with a text that is not blank and the stored URL is the
+/// notice's own (http and https alike); the text goes in with its trailing
+/// whitespace trimmed. Everything else stays as it was. Returns the new body
+/// and how many notices were replaced.
+pub fn restore(body: &str, store: &PeriodAttachments) -> (String, usize) {
+    let mut out = String::with_capacity(body.len());
+    let mut last = 0;
+    let mut count = 0;
+    for s in find_scrubbed(body) {
+        let text = match store.files.get(&s.key) {
+            Some(f) if same_url(&f.url, &s.url) => f.text.as_deref(),
+            _ => None,
+        };
+        let Some(text) = text.filter(|t| !t.trim().is_empty()) else {
+            continue;
+        };
+        out.push_str(&body[last..s.start]);
+        out.push_str(text.trim_end());
+        last = s.end;
+        count += 1;
+    }
+    out.push_str(&body[last..]);
+    (out, count)
+}
+
 /// Turns fetched bytes into UTF-8: ASCII and valid UTF-8 are kept as they
 /// are, anything else is read as Windows-1252. Returns the encoding used.
 pub fn decode(bytes: &[u8]) -> (String, &'static str) {

@@ -96,7 +96,7 @@ fn parsing_the_same_archive_twice_writes_identical_files() {
     let mut first: Option<BTreeMap<String, Vec<u8>>> = None;
     for run in 0..RUNS {
         let output = scratch_dir(&format!("parse-output-{run}"));
-        pipeline::run_parse(&input, &output, "tied-list", true, None, None, false).unwrap();
+        pipeline::run_parse(&input, &output, "tied-list", true, None, None, false, None).unwrap();
         let snap = snapshot(&output);
         fs::remove_dir_all(&output).unwrap();
 
@@ -118,7 +118,7 @@ fn aggregating_the_same_lists_twice_writes_identical_files() {
     let parse_input = scratch_dir("aggregate-parse-input");
     fs::write(parse_input.join("2026-February.mbox"), tied_mbox()).unwrap();
     let parsed = scratch_dir("aggregate-parsed");
-    pipeline::run_parse(&parse_input, &parsed, "tied-list", true, None, None, false).unwrap();
+    pipeline::run_parse(&parse_input, &parsed, "tied-list", true, None, None, false, None).unwrap();
 
     let lists = scratch_dir("aggregate-lists");
     for list in ["list-a", "list-b"] {
@@ -153,7 +153,7 @@ fn a_list_without_sources_parses_exactly_as_it_did_before() {
         ("raw/2026-October.mbox", "r-devel", "golden/october"),
     ] {
         let output = scratch_dir(&format!("golden-{list}"));
-        pipeline::run_parse(&fixtures.join(input), &output, list, true, None, None, false).unwrap();
+        pipeline::run_parse(&fixtures.join(input), &output, list, true, None, None, false, None).unwrap();
         assert_same(&snapshot(&fixtures.join(golden)), &snapshot(&output), 0);
         fs::remove_dir_all(&output).unwrap();
     }
@@ -178,7 +178,7 @@ fn fetching_and_applying_sources_twice_writes_identical_files() {
         run_sources(&raw, &sources_dir, common::BASE, &SourcesOptions::default(), &mut source).unwrap();
 
         let output = scratch_dir(&format!("sources-parse-{run}"));
-        pipeline::run_parse(&raw, &output, "r-devel", true, None, Some((&sources_dir, common::BASE)), false).unwrap();
+        pipeline::run_parse(&raw, &output, "r-devel", true, None, Some((&sources_dir, common::BASE)), false, None).unwrap();
 
         let snaps = [snapshot(&sources_dir), snapshot(&output)];
         fs::remove_dir_all(&sources_dir).unwrap();

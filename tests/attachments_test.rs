@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fs;
 
 use rmail_parser::attachments::{
-    decode, find_scrubbed, load, same_url, save, PeriodAttachments, StoredFile, NOTICE,
+    decode, find_scrubbed, load, restore, same_url, save, PeriodAttachments, StoredFile, NOTICE,
 };
 
 const NEW_URL: &str =
@@ -147,4 +147,87 @@ fn a_file_for_another_period_is_refused() {
     )
     .unwrap();
     assert!(load(&dir, "2010-February").is_err());
+}
+
+const KEY: &str = "20100210/75317b7f/attachment.pl";
+
+fn stored(entries: &[(&str, StoredFile)]) -> PeriodAttachments {
+    PeriodAttachments {
+        period: "2010-February".to_string(),
+        files: entries
+            .iter()
+            .map(|(k, f)| (k.to_string(), f.clone()))
+            .collect(),
+    }
+}
+
+fn with_text(url: &str, text: &str) -> StoredFile {
+    StoredFile {
+        url: url.to_string(),
+        encoding: Some("ascii".to_string()),
+        text: Some(text.to_string()),
+        status: None,
+    }
+}
+
+fn with_status(url: &str, status: &str) -> StoredFile {
+    StoredFile {
+        url: url.to_string(),
+        encoding: None,
+        text: None,
+        status: Some(status.to_string()),
+    }
+}
+
+#[test]
+fn restores_a_stored_text_in_place() {
+    let body = format!("Hi\n{NOTICE}\nName: not available\nURL: <{NEW_URL}>\n-- \nfooter");
+    let store = stored(&[(KEY, with_text(NEW_URL, "Hello\n\n"))]);
+    let (out, n) = restore(&body, &store);
+    assert_eq!(out, "Hi\nHello\n-- \nfooter");
+    assert_eq!(n, 1);
+}
+
+#[test]
+fn leaves_what_it_cannot_restore() {
+    let body = format!("Hi\n{NOTICE}\nName: not available\nURL: <{NEW_URL}>\nend");
+    let other = "https://other.example.org/pipermail/r-help/attachments/20100210/75317b7f/attachment.pl";
+    let cases = [
+        stored(&[]),
+        stored(&[(KEY, with_status(NEW_URL, "not found"))]),
+        stored(&[(KEY, with_text(other, "Hello"))]),
+        stored(&[(KEY, with_text(NEW_URL, "  \n"))]),
+        stored(&[(KEY, with_text(NEW_URL, ""))]),
+    ];
+    for store in cases {
+        let (out, n) = restore(&body, &store);
+        assert_eq!(out, body);
+        assert_eq!(n, 0);
+    }
+}
+
+#[test]
+fn restores_a_stored_text_whichever_scheme_was_fetched() {
+    let body = format!("{NOTICE}\nName: not available\nURL: <{NEW_URL}>\nend");
+    let http = NEW_URL.replacen("https://", "http://", 1);
+    let store = stored(&[(KEY, with_text(&http, "Hello"))]);
+    assert_eq!(restore(&body, &store), ("Hello\nend".to_string(), 1));
+}
+
+#[test]
+fn restores_two_and_leaves_a_named_part() {
+    let second = "https://stat.ethz.ch/pipermail/r-help/attachments/20100210/75317b7f/attachment-0001.pl";
+    let named = format!(
+        "An embedded and charset-unspecified text was scrubbed...\nName: x.R\nURL: <{NEW_URL}>"
+    );
+    let body = format!(
+        "{NOTICE}\nName: not available\nURL: <{NEW_URL}>\n\nmid\n\n{named}\n\n{NOTICE}\nName: not available\nURL: <{second}>\n"
+    );
+    let store = stored(&[
+        (KEY, with_text(NEW_URL, "one")),
+        ("20100210/75317b7f/attachment-0001.pl", with_text(second, "two\n")),
+    ]);
+    let (out, n) = restore(&body, &store);
+    assert_eq!(out, format!("one\n\nmid\n\n{named}\n\ntwo\n"));
+    assert_eq!(n, 2);
 }

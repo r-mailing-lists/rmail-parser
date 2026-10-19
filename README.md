@@ -130,6 +130,15 @@ rmail-parser parse --input raw/ --output processed/ --list r-devel \
 
 `--sources` and `--base-url` must be given together. Each message with a known page gains a `source_url` of the form `<base-url>/<period>/<number>.html`, and its body and snippet carry the restored characters. Without the two flags, or for a raw file that has no `sources/` file, the output is what it has always been and has no `source_url` field.
 
+### `parse --attachments`
+
+```bash
+rmail-parser parse --input raw/ --output processed/ --list r-devel \
+    --attachments attachments/
+```
+
+Each notice that Mailman left where it scrubbed a text is replaced by the text `attachments` stored for it, trailing whitespace trimmed, and the snippet is made again. A notice stays when its file is not stored, was recorded as `"not found"` or `"too large"`, holds only whitespace, or was fetched from another URL. Without the flag, or for a raw file with no `attachments/` file, the output is what it has always been. A damaged `attachments/` file stops the run and is named. With `--hide-addresses`, the restored text is cleaned too.
+
 ## Hiding addresses
 
 ```bash

@@ -45,6 +45,9 @@ enum Commands {
         /// Hide mailbox addresses in names, subjects and text, and write Message-IDs as hashes (for a list whose archive only its members can read)
         #[arg(long, default_value_t = false)]
         hide_addresses: bool,
+        /// Directory of attachments/ files written by `attachments`; the text Mailman scrubbed is put back into the bodies
+        #[arg(long)]
+        attachments: Option<String>,
     },
     /// Fetch the text Mailman scrubbed out of messages into attachments/ files
     Attachments {
@@ -132,6 +135,7 @@ fn main() {
             sources,
             base_url,
             hide_addresses,
+            attachments,
         } => {
             // clap has already made sure the two come together.
             let source_pages = match (&sources, &base_url) {
@@ -146,6 +150,7 @@ fn main() {
                 aliases.as_deref().map(Path::new),
                 source_pages,
                 hide_addresses,
+                attachments.as_deref().map(Path::new),
             )
         }
         Commands::Attachments {
