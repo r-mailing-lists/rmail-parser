@@ -47,6 +47,51 @@ fn a_named_part_is_left_out() {
 }
 
 #[test]
+fn the_name_line_in_another_language() {
+    // Mailman wrote "not available" in the poster's language. An archive kept
+    // in ASCII has a "?" for each letter it could not write, and text written
+    // in UTF-8 but read as Windows-1252 has two letters for one.
+    for name in [
+        "no disponible",
+        "não disponível",
+        "nÃ£o disponÃ­vel",
+        "n?o dispon?vel",
+        "inte tillg?nglig",
+        "nicht verf?gbar",
+        "ikke tilgjengelig",
+        "nem el?rhet?",
+        "nem elérhető",
+        "ei saatavilla",
+        "Negalima",
+        "nie znany",
+        "[??dn? popis nen? k dispozici]",
+        "?????? ?? ????????.",
+        "???????????",
+    ] {
+        let text = format!("{NOTICE}\nName: {name}\nURL: <{NEW_URL}>\nafter");
+        let found = find_scrubbed(&text);
+        assert_eq!(found.len(), 1, "{name}");
+        assert_eq!(found[0].key, "20100210/75317b7f/attachment.pl", "{name}");
+        assert!(text[found[0].end..].starts_with("\nafter"), "{name}");
+    }
+}
+
+#[test]
+fn a_named_part_in_another_language_is_left_out() {
+    for name in [
+        "Nachrichtenteil als Anhang",
+        "Parte allegato al messaggio",
+        "R-patch",
+        "??????????",
+        "no disponible.txt",
+        "not available2",
+    ] {
+        let text = format!("{NOTICE}\nName: {name}\nURL: <{NEW_URL}>\n");
+        assert!(find_scrubbed(&text).is_empty(), "{name}");
+    }
+}
+
+#[test]
 fn a_quoted_notice_is_left_out() {
     let text = format!("> {NOTICE}\n> Name: not available\n> URL: <{NEW_URL}>\n");
     assert!(find_scrubbed(&text).is_empty());
