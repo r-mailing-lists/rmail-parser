@@ -119,7 +119,7 @@ rmail-parser attachments --raw raw/ --out attachments/ \
 | `--max-requests` | 3000 | Requests one run may make. |
 | `--delay-ms` | 1000 | Pause between requests, in milliseconds. |
 
-Only notices at the start of a line, followed by `Name: not available` and an address of the form `YYYYMMDD/xxxxxxxx/attachment.ext`, count. Periods are taken oldest first. Text is stored as UTF-8; bytes that are not valid UTF-8 are read as Windows-1252, and the file records which. A 404 is recorded as `"not found"` and a file over 1 MiB as `"too large"`, and neither is asked for again. A failed request records nothing and is asked for again on a later run. The run stops after 10 failures in a row, prints `warning: <reason>` and still exits 0. The report is printed one count per line.
+Only notices at the start of a line, followed by `Name: not available` and an address of the form `YYYYMMDD/xxxxxxxx/attachment.ext`, count. Periods are taken oldest first. Text is stored as UTF-8; bytes that are not valid UTF-8 are read as Windows-1252, and the file records which. Addresses in the text are stored as `user at domain`, as Mailman writes them in its own archive. A 404 is recorded as `"not found"` and a file over 1 MiB as `"too large"`, and neither is asked for again. A failed request records nothing and is asked for again on a later run. The run stops after 10 failures in a row, prints `warning: <reason>` and still exits 0. The report is printed one count per line.
 
 ### `parse --sources`
 
@@ -137,7 +137,7 @@ rmail-parser parse --input raw/ --output processed/ --list r-devel \
     --attachments attachments/
 ```
 
-Each notice that Mailman left where it scrubbed a text is replaced by the text `attachments` stored for it, trailing whitespace trimmed, and the snippet is made again. A notice stays when its file is not stored, was recorded as `"not found"` or `"too large"`, holds only whitespace, or was fetched from another URL. Without the flag, or for a raw file with no `attachments/` file, the output is what it has always been. A damaged `attachments/` file stops the run and is named. With `--hide-addresses`, the restored text is cleaned too.
+Each notice that Mailman left where it scrubbed a text is replaced by the text `attachments` stored for it, trailing whitespace trimmed and its addresses written as `user at domain`, and the snippet is made again. A notice stays when its file is not stored, was recorded as `"not found"` or `"too large"`, holds only whitespace, or was fetched from another URL. Without the flag, or for a raw file with no `attachments/` file, the output is what it has always been. A damaged `attachments/` file stops the run and is named. With `--hide-addresses`, the restored text is cleaned too.
 
 ## Hiding addresses
 

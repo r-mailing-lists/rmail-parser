@@ -273,3 +273,26 @@ fn a_quoted_notice_asks_nothing() {
     assert_eq!(report.periods, 1);
     assert_eq!(report.found, 0);
 }
+
+#[test]
+fn the_store_holds_no_whole_address() {
+    use std::io::Read;
+
+    let raw = raw_dir("att-addr-raw", &[("2010-February", &[url(B)])]);
+    let out = scratch_dir("att-addr-out");
+    let mut source = FakeAttachments::new();
+    source.serve(&url(B), b"On Tue, Al <al.smith@example.org> wrote:");
+    run(&raw, &out, &mut source);
+
+    let feb = attachments::load(&out, "2010-February").unwrap().unwrap();
+    assert_eq!(
+        feb.files[B].text.as_deref(),
+        Some("On Tue, Al <al.smith at example.org> wrote:")
+    );
+    let gz = fs::read(out.join("2010-February.json.gz")).unwrap();
+    let mut json = String::new();
+    flate2::read::GzDecoder::new(gz.as_slice())
+        .read_to_string(&mut json)
+        .unwrap();
+    assert!(!json.contains("@example.org"));
+}

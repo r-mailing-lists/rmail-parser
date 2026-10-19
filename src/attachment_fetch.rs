@@ -3,7 +3,9 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::attachments::{self, decode, find_scrubbed, PeriodAttachments, StoredFile};
+use crate::attachments::{
+    self, decode, find_scrubbed, obscure_addresses, PeriodAttachments, StoredFile,
+};
 use crate::pipeline::{discover_mbox_files, read_file_lossy};
 use crate::source_fetch::HttpFetcher;
 use crate::sources::{period_of, period_sort_key};
@@ -177,7 +179,7 @@ pub fn run_attachments(
                     StoredFile {
                         url,
                         encoding: Some(encoding.to_string()),
-                        text: Some(text),
+                        text: Some(obscure_addresses(&text)),
                         status: None,
                     }
                 }

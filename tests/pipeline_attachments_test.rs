@@ -136,3 +136,17 @@ fn a_damaged_store_stops_the_parse() {
     .unwrap_err();
     assert!(format!("{:#}", err).contains("2010-February.json.gz"));
 }
+
+#[test]
+fn restored_bodies_hold_no_whole_address() {
+    let raw = raw_dir("obscure-raw");
+    let store = store_with("obscure-store", "Write to al.smith@example.org today.\n");
+    let out = parse(&raw, "obscure-out", false, Some(&store));
+    for (name, bytes) in read_all(&out) {
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(!text.contains("al.smith@example.org"), "{name}");
+    }
+    assert!(first_message(&out)
+        .body_plain
+        .contains("al.smith at example.org"));
+}

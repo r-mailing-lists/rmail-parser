@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 use std::fs;
 
 use rmail_parser::attachments::{
-    decode, find_scrubbed, load, restore, same_url, save, PeriodAttachments, StoredFile, NOTICE,
+    decode, find_scrubbed, load, obscure_addresses, restore, same_url, save, PeriodAttachments,
+    StoredFile, NOTICE,
 };
 
 const NEW_URL: &str =
@@ -191,7 +192,8 @@ fn restores_a_stored_text_in_place() {
 #[test]
 fn leaves_what_it_cannot_restore() {
     let body = format!("Hi\n{NOTICE}\nName: not available\nURL: <{NEW_URL}>\nend");
-    let other = "https://other.example.org/pipermail/r-help/attachments/20100210/75317b7f/attachment.pl";
+    let other =
+        "https://other.example.org/pipermail/r-help/attachments/20100210/75317b7f/attachment.pl";
     let cases = [
         stored(&[]),
         stored(&[(KEY, with_status(NEW_URL, "not found"))]),
@@ -216,7 +218,8 @@ fn restores_a_stored_text_whichever_scheme_was_fetched() {
 
 #[test]
 fn restores_two_and_leaves_a_named_part() {
-    let second = "https://stat.ethz.ch/pipermail/r-help/attachments/20100210/75317b7f/attachment-0001.pl";
+    let second =
+        "https://stat.ethz.ch/pipermail/r-help/attachments/20100210/75317b7f/attachment-0001.pl";
     let named = format!(
         "An embedded and charset-unspecified text was scrubbed...\nName: x.R\nURL: <{NEW_URL}>"
     );
@@ -225,9 +228,46 @@ fn restores_two_and_leaves_a_named_part() {
     );
     let store = stored(&[
         (KEY, with_text(NEW_URL, "one")),
-        ("20100210/75317b7f/attachment-0001.pl", with_text(second, "two\n")),
+        (
+            "20100210/75317b7f/attachment-0001.pl",
+            with_text(second, "two\n"),
+        ),
     ]);
     let (out, n) = restore(&body, &store);
     assert_eq!(out, format!("one\n\nmid\n\n{named}\n\ntwo\n"));
     assert_eq!(n, 2);
+}
+
+#[test]
+fn obscures_addresses_as_mailman_does() {
+    let out = obscure_addresses("write to al.smith@example.org or <bo+lists@mail.example.co.uk>");
+    assert_eq!(
+        out,
+        "write to al.smith at example.org or <bo+lists at mail.example.co.uk>"
+    );
+    for same in ["#' @param x", "user at example.org"] {
+        assert_eq!(obscure_addresses(same), same);
+    }
+    assert_eq!(obscure_addresses(&out), out);
+}
+
+#[test]
+fn restore_obscures_what_it_inserts() {
+    let mut files = BTreeMap::new();
+    files.insert(
+        "20100210/75317b7f/attachment.pl".to_string(),
+        StoredFile {
+            url: NEW_URL.to_string(),
+            encoding: Some("ascii".to_string()),
+            text: Some("Mail al.smith@example.org".to_string()),
+            status: None,
+        },
+    );
+    let store = PeriodAttachments {
+        period: "2010-February".to_string(),
+        files,
+    };
+    let (out, count) = restore(&new_form("\n"), &store);
+    assert_eq!(count, 1);
+    assert_eq!(out, "Mail al.smith at example.org\nafter");
 }
