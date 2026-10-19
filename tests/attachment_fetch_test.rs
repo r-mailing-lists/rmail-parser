@@ -395,11 +395,14 @@ fn a_run_of_not_found_across_two_periods_is_forgotten_in_both() {
     let mut source = FakeAttachments::new();
     // March, taken first, starts with a file; its five 404s are written with
     // it when the period is done, before the run of 404s ends in February.
+    // Then the source goes away, so the file asked for again is not there.
     source.serve(&march[0], b"kept");
+    source.go_away_after(1);
 
     let report = run(&raw, &out, &mut source);
 
-    assert_eq!(source.asked.len(), 11);
+    assert_eq!(source.asked.len(), 12);
+    assert_eq!(report.probes, 1);
     assert_eq!(
         report.stopped.as_deref(),
         Some("10 requests in a row failed")
@@ -448,15 +451,241 @@ fn a_run_of_not_found_already_written_mid_period_is_taken_out() {
     for u in &urls[..45] {
         source.serve(u, b"x");
     }
+    source.go_away_after(45);
 
     let report = run(&raw, &out, &mut source);
 
-    assert_eq!(source.asked.len(), 55);
+    assert_eq!(source.asked.len(), 56);
+    assert_eq!(report.probes, 1);
     assert!(report.stopped.is_some());
     assert_eq!(report.fetched, 45);
     assert_eq!(report.left, 11);
     let feb = attachments::load(&out, "2010-February").unwrap().unwrap();
     assert_eq!(feb.files.len(), 45);
+    assert_eq!(not_found_entries(&feb), 0);
+}
+
+/// One file that arrives, then ten that are not there, then one that is.
+fn one_ten_one(name: &str) -> (PathBuf, Vec<String>) {
+    let urls = many(12);
+    let raw = raw_dir(name, &[("2010-February", &urls)]);
+    (raw, urls)
+}
+
+#[test]
+fn ten_missing_files_after_one_that_arrived_are_recorded_and_the_run_goes_on() {
+    let (raw, urls) = one_ten_one("att-probe-raw");
+    let out = scratch_dir("att-probe-out");
+    let mut source = FakeAttachments::new();
+    source.serve(&urls[0], b"first");
+    source.serve(&urls[11], b"last");
+
+    let report = run(&raw, &out, &mut source);
+
+    let mut asked = urls[..11].to_vec();
+    asked.push(urls[0].clone());
+    asked.push(urls[11].clone());
+    assert_eq!(source.asked, asked);
+    assert_eq!(report.probes, 1);
+    assert_eq!(report.stopped, None);
+    assert_eq!(report.not_found, 10);
+    assert_eq!(report.fetched, 2);
+    assert_eq!(report.failed, 0);
+    assert_eq!(report.left, 0);
+    let feb = attachments::load(&out, "2010-February").unwrap().unwrap();
+    assert_eq!(feb.files.len(), 12);
+    assert_eq!(not_found_entries(&feb), 10);
+    assert_eq!(
+        feb.files["20100012/75317b7f/attachment.txt"]
+            .text
+            .as_deref(),
+        Some("last")
+    );
+}
+
+#[test]
+fn a_probe_that_fails_stops_the_run_and_forgets_the_streak() {
+    // The source goes away after the first file, so the probe is a 404.
+    let (raw, urls) = one_ten_one("att-probe-404-raw");
+    let out = scratch_dir("att-probe-404-out");
+    let mut source = FakeAttachments::new();
+    source.serve(&urls[0], b"first");
+    source.serve(&urls[11], b"last");
+    source.go_away_after(1);
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked.len(), 12);
+    assert_eq!(source.asked[11], urls[0]);
+    assert_eq!(report.probes, 1);
+    assert_eq!(
+        report.stopped.as_deref(),
+        Some("10 requests in a row failed")
+    );
+    assert_eq!(report.not_found, 0);
+    assert_eq!(report.left, 11);
+    let feb = attachments::load(&out, "2010-February").unwrap().unwrap();
+    assert_eq!(feb.files.len(), 1);
+    assert_eq!(not_found_entries(&feb), 0);
+
+    // A file stored by an earlier run is asked for when none arrived in
+    // this one, and a probe that fails outright stops the run the same way.
+    let raw = raw_dir(
+        "att-probe-err-raw",
+        &[("2005-March", &[url(A)]), ("2010-February", &many(11))],
+    );
+    let out = scratch_dir("att-probe-err-out");
+    let mut first = FakeAttachments::new();
+    first.serve(&url(A), b"stored");
+    first.go_away_after(1);
+    run(&raw, &out, &mut first);
+    let feb_file = out.join("2010-February.json.gz");
+    assert!(!feb_file.exists());
+
+    let mut source = FakeAttachments::new();
+    source.fail(&url(A));
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked.len(), 11);
+    assert_eq!(source.asked[10], url(A));
+    assert_eq!(report.probes, 1);
+    assert!(report.stopped.is_some());
+    assert!(!feb_file.exists());
+}
+
+#[test]
+fn a_file_stored_by_an_earlier_run_tells_that_the_source_is_there() {
+    let feb = many(11);
+    let raw = raw_dir(
+        "att-probe-stored-raw",
+        &[("2005-March", &[url(A)]), ("2010-February", &feb)],
+    );
+    let out = scratch_dir("att-probe-stored-out");
+    let mut first = FakeAttachments::new();
+    first.serve(&url(A), b"stored");
+    first.go_away_after(1);
+    let report = run(&raw, &out, &mut first);
+    assert!(report.stopped.is_some());
+
+    let mut source = FakeAttachments::new();
+    source.serve(&url(A), b"stored");
+    source.serve(&feb[10], b"last");
+    let report = run(&raw, &out, &mut source);
+
+    let mut asked = feb[..10].to_vec();
+    asked.push(url(A));
+    asked.push(feb[10].clone());
+    assert_eq!(source.asked, asked);
+    assert_eq!(report.probes, 1);
+    assert_eq!(report.stopped, None);
+    assert_eq!(report.stored_before, 1);
+    assert_eq!(report.not_found, 10);
+    assert_eq!(report.fetched, 1);
+    let stored = attachments::load(&out, "2010-February").unwrap().unwrap();
+    assert_eq!(not_found_entries(&stored), 10);
+}
+
+#[test]
+fn with_nothing_known_to_be_there_ten_missing_files_stop_the_run() {
+    let urls = many(11);
+    let raw = raw_dir(
+        "att-unknown-raw",
+        &[("2005-March", &[url(A)]), ("2010-February", &urls)],
+    );
+    let out = scratch_dir("att-unknown-out");
+    // An earlier period whose only file was too large holds no text, so
+    // nothing in it is known to be there.
+    let mut first = FakeAttachments::new();
+    first.serve(&url(A), b"too large for the limit");
+    first.go_away_after(1);
+    let opts = AttachmentsOptions {
+        max_bytes: 4,
+        ..AttachmentsOptions::default()
+    };
+    run_with(&raw, &out, BASE, &opts, &mut first);
+    let march = attachments::load(&out, "2005-March").unwrap().unwrap();
+    assert_eq!(march.files[A].status.as_deref(), Some("too large"));
+    let mut source = FakeAttachments::new();
+    source.serve(&url(A), b"x");
+    source.serve(&urls[10], b"there");
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked, urls[..10]);
+    assert_eq!(report.probes, 0);
+    assert_eq!(
+        report.stopped.as_deref(),
+        Some("10 requests in a row failed")
+    );
+    assert_eq!(report.not_found, 0);
+    assert_eq!(report.left, 11);
+    assert!(attachments::load(&out, "2010-February").unwrap().is_none());
+}
+
+#[test]
+fn a_streak_with_an_error_in_it_stops_without_a_probe() {
+    let (raw, urls) = one_ten_one("att-err-streak-raw");
+    let out = scratch_dir("att-err-streak-out");
+    let mut source = FakeAttachments::new();
+    source.serve(&urls[0], b"first");
+    source.serve(&urls[11], b"last");
+    source.fail(&urls[5]);
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(source.asked, urls[..11]);
+    assert_eq!(report.probes, 0);
+    assert_eq!(
+        report.stopped.as_deref(),
+        Some("10 requests in a row failed")
+    );
+    assert_eq!(report.not_found, 0);
+    assert_eq!(report.failed, 10);
+    assert_eq!(report.left, 11);
+    let feb = attachments::load(&out, "2010-February").unwrap().unwrap();
+    assert_eq!(feb.files.len(), 1);
+}
+
+#[test]
+fn the_probe_counts_toward_the_cap() {
+    let (raw, urls) = one_ten_one("att-probe-cap-raw");
+    let serve = |source: &mut FakeAttachments| {
+        source.serve(&urls[0], b"first");
+        source.serve(&urls[11], b"last");
+    };
+    let cap = |max_requests| AttachmentsOptions {
+        max_requests,
+        ..AttachmentsOptions::default()
+    };
+
+    // The probe is the twelfth request, so the last file is left.
+    let out = scratch_dir("att-probe-cap-out");
+    let mut source = FakeAttachments::new();
+    serve(&mut source);
+    let report = run_with(&raw, &out, BASE, &cap(12), &mut source);
+
+    assert_eq!(source.asked.len(), 12);
+    assert_eq!(source.asked[11], urls[0]);
+    assert_eq!(report.probes, 1);
+    assert_eq!(report.not_found, 10);
+    assert_eq!(report.left, 1);
+    assert_eq!(
+        report.stopped.as_deref(),
+        Some("request budget of 12 spent")
+    );
+
+    // With no request left for it, there is no probe, and the ten are not
+    // taken for missing files.
+    let out = scratch_dir("att-probe-no-cap-out");
+    let mut source = FakeAttachments::new();
+    serve(&mut source);
+    let report = run_with(&raw, &out, BASE, &cap(11), &mut source);
+
+    assert_eq!(source.asked.len(), 11);
+    assert_eq!(report.probes, 0);
+    assert_eq!(report.not_found, 0);
+    assert!(report.stopped.is_some());
+    let feb = attachments::load(&out, "2010-February").unwrap().unwrap();
     assert_eq!(not_found_entries(&feb), 0);
 }
 

@@ -160,3 +160,22 @@ fn a_restored_body_is_cleaned_like_any_other() {
     assert_eq!(msg.body_plain, "First words.\nSecond line.");
     assert_eq!(msg.body_snippet, "First words.\nSecond line.");
 }
+
+#[test]
+fn a_restored_message_says_where_its_text_came_from() {
+    let raw = raw_dir("from-raw");
+    let store = store_with("from-store", "Restored words here.\n");
+    let out = parse(&raw, "from-out", false, Some(&store));
+    assert_eq!(first_message(&out).restored_from, [URL]);
+}
+
+#[test]
+fn an_unrestored_message_has_no_restored_from_key() {
+    let raw = raw_dir("unrestored-raw");
+    // Only whitespace is stored, so the notice stays.
+    let store = store_with("unrestored-store", "  \n");
+    let out = parse(&raw, "unrestored-out", false, Some(&store));
+    assert!(first_message(&out).body_plain.contains(NOTICE));
+    let json = fs::read_to_string(out.join("2026-02.json")).unwrap();
+    assert!(!json.contains("restored_from"), "{json}");
+}

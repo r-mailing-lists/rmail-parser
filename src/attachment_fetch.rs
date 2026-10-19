@@ -75,6 +75,10 @@ pub struct AttachmentsReport {
     pub left: usize,
     /// Why the run ended while work was left, if it did.
     pub stopped: Option<String>,
+    /// Requests for a file known to be there, made to tell a run of 404s
+    /// from a source that went away. They count toward the requests a run
+    /// may make, and nothing is stored for them.
+    pub probes: usize,
 }
 
 /// `url` without `http://` or `https://`.
@@ -91,12 +95,16 @@ fn bare(url: &str) -> &str {
 ///
 /// A 404 and a file over the size limit are recorded, so they are not asked
 /// for again. A failed request records nothing and is asked for again on a
-/// later run. A 404 counts as a failure in a row, though: when the run ends
-/// on `max_failures` of them, the 404s since the last file that arrived are
-/// taken out of the store again, in whichever period they were recorded, as
-/// a source that has moved its files or turns us away answers 404 to
-/// everything. A period's file is written when it has changed, and at least
-/// every 50 new entries.
+/// later run. A 404 counts as a failure in a row, though, as a source that
+/// has moved its files or turns us away answers 404 to everything. When
+/// `max_failures` of them come in a row, a file known to be there is asked
+/// for once: the last one this run fetched with its text, or else one
+/// stored with its text in a period loaded so far. If it arrives, the
+/// source is there, the 404s stand and the run goes on. If it does not, or
+/// no file is known, or the failures in a row hold an error, the run ends,
+/// and the 404s since the last file that arrived are taken out of the store
+/// again, in whichever period they were recorded. A period's file is
+/// written when it has changed, and at least every 50 new entries.
 ///
 /// Running out of requests or giving up on an archive that keeps failing is
 /// not an error: the report says why the run stopped.
@@ -132,6 +140,10 @@ pub fn run_attachments(
     // The 404s since the last file that arrived, as (period, key).
     let mut streak: Vec<(String, String)> = Vec::new();
     let mut halt: Option<String> = None;
+    // Files known to be there, at the base's scheme: the last one fetched
+    // with its text in this run, and one stored with its text before.
+    let mut last_fetched: Option<String> = None;
+    let mut stored_with_text: Option<String> = None;
 
     for file_path in &files {
         report.periods += 1;
@@ -161,6 +173,14 @@ pub fn run_attachments(
             period: period.clone(),
             files: Default::default(),
         });
+        if stored_with_text.is_none() {
+            // Only a URL that is the archive's own, as for a notice.
+            stored_with_text = store
+                .files
+                .iter()
+                .find(|(key, f)| f.text.is_some() && bare(&f.url) == format!("{}{}", prefix, key))
+                .map(|(_, f)| format!("{}{}", scheme, bare(&f.url)));
+        }
         // Whether the store differs from the period's file, and how many
         // entries were added since the file was last written.
         let mut changed = false;
@@ -195,6 +215,7 @@ pub fn run_attachments(
                 }
                 Ok(Some(bytes)) => {
                     report.fetched += 1;
+                    last_fetched = Some(url.clone());
                     let (text, encoding) = decode(&bytes);
                     Some(StoredFile {
                         url,
@@ -240,6 +261,33 @@ pub fn run_attachments(
             }
             failures += 1;
             if failures >= opts.max_failures {
+                // Files deleted at the source, or a source that went away? A
+                // file known to be there tells, when every failure in a row
+                // is a 404 (the streak holds the 404s among them) and a
+                // request is left to ask for it.
+                let known = last_fetched.as_ref().or(stored_with_text.as_ref());
+                let probe =
+                    known.filter(|_| streak.len() == failures && requests < opts.max_requests);
+                if let Some(known) = probe {
+                    requests += 1;
+                    report.probes += 1;
+                    let answers = matches!(fetcher.get_bytes(known), Ok(Some(_)));
+                    let word = if answers {
+                        "it answers"
+                    } else {
+                        "it does not answer"
+                    };
+                    eprintln!(
+                        "source checked after {} not found in a row: {}",
+                        failures, word
+                    );
+                    if answers {
+                        // So the 404s are its word on those files.
+                        failures = 0;
+                        streak.clear();
+                        continue;
+                    }
+                }
                 halt = Some(format!("{} requests in a row failed", failures));
                 let (here, elsewhere) = forget(out, &mut streak, &mut store)?;
                 if here > 0 {

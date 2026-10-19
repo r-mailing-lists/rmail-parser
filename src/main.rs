@@ -241,6 +241,7 @@ fn print_attachments_report(report: &AttachmentsReport) {
     eprintln!("Failed:               {}", report.failed);
     eprintln!("Outside the archive:  {}", report.refused);
     eprintln!("Left:                 {}", report.left);
+    eprintln!("Source checks:        {}", report.probes);
     if let Some(reason) = &report.stopped {
         eprintln!("warning: {}", reason);
     }

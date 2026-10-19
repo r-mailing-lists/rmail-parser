@@ -348,5 +348,6 @@ fn test_attachments_that_stops_early_prints_a_warning_and_exits_zero() {
     );
     assert!(stderr.contains("Notices found:        1\n"), "{stderr}");
     assert!(stderr.contains("Left:                 1\n"), "{stderr}");
+    assert!(stderr.contains("Source checks:        0\n"), "{stderr}");
     assert_eq!(std::fs::read_dir(&out).unwrap().count(), 0);
 }

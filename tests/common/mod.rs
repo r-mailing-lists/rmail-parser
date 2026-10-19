@@ -136,12 +136,13 @@ pub fn article_page(message_id: &str, body_html: &str) -> String {
 }
 
 /// A source of scrubbed texts that serves bytes by URL, answers 404 for a URL
-/// it has nothing for, fails the URLs it is told to, and remembers what it
-/// was asked for.
+/// it has nothing for, fails the URLs it is told to, can go away after so
+/// many requests, and remembers what it was asked for.
 #[derive(Default)]
 pub struct FakeAttachments {
     files: HashMap<String, Vec<u8>>,
     failing: HashSet<String>,
+    gone_after: Option<usize>,
     /// Every URL asked for, in order.
     pub asked: Vec<String>,
 }
@@ -162,6 +163,12 @@ impl FakeAttachments {
     pub fn stop_failing(&mut self) {
         self.failing.clear();
     }
+
+    /// Answers 404 to every request after the first `requests`, as a source
+    /// that has moved its files does.
+    pub fn go_away_after(&mut self, requests: usize) {
+        self.gone_after = Some(requests);
+    }
 }
 
 impl AttachmentFetcher for FakeAttachments {
@@ -169,6 +176,9 @@ impl AttachmentFetcher for FakeAttachments {
         self.asked.push(url.to_string());
         if self.failing.contains(url) {
             anyhow::bail!("connection refused");
+        }
+        if self.gone_after.is_some_and(|n| self.asked.len() > n) {
+            return Ok(None);
         }
         Ok(self.files.get(url).cloned())
     }

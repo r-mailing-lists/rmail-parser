@@ -124,27 +124,29 @@ pub fn find_scrubbed(text: &str) -> Vec<Scrubbed> {
 /// notice's own (http and https alike); the text goes in with its addresses
 /// written as `user at domain` (see `obscure_addresses`), its line ends made
 /// `\n` and its trailing whitespace trimmed. Everything else stays as it was.
-/// Returns the new body and how many notices were replaced. The body is not
-/// trimmed here: the caller trims it as `parse_message` trims every body.
-pub fn restore(body: &str, store: &PeriodAttachments) -> (String, usize) {
+/// Returns the new body and the stored URL of each text put in, as stored
+/// and in the order of the body (empty when nothing was replaced). The body
+/// is not trimmed here: the caller trims it as `parse_message` trims every
+/// body.
+pub fn restore(body: &str, store: &PeriodAttachments) -> (String, Vec<String>) {
     let mut out = String::with_capacity(body.len());
     let mut last = 0;
-    let mut count = 0;
+    let mut urls = Vec::new();
     for s in find_scrubbed(body) {
-        let text = match store.files.get(&s.key) {
-            Some(f) if same_url(&f.url, &s.url) => f.text.as_deref(),
-            _ => None,
+        let file = match store.files.get(&s.key) {
+            Some(f) if same_url(&f.url, &s.url) => f,
+            _ => continue,
         };
-        let Some(text) = text.filter(|t| !t.trim().is_empty()) else {
+        let Some(text) = file.text.as_deref().filter(|t| !t.trim().is_empty()) else {
             continue;
         };
         out.push_str(&body[last..s.start]);
         out.push_str(lf_line_ends(&obscure_addresses(text)).trim_end());
         last = s.end;
-        count += 1;
+        urls.push(file.url.clone());
     }
     out.push_str(&body[last..]);
-    (out, count)
+    (out, urls)
 }
 
 /// Turns fetched bytes into UTF-8: ASCII and valid UTF-8 are kept as they

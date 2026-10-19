@@ -186,7 +186,7 @@ fn restores_a_stored_text_in_place() {
     let store = stored(&[(KEY, with_text(NEW_URL, "Hello\n\n"))]);
     let (out, n) = restore(&body, &store);
     assert_eq!(out, "Hi\nHello\n-- \nfooter");
-    assert_eq!(n, 1);
+    assert_eq!(n.len(), 1);
 }
 
 #[test]
@@ -204,7 +204,7 @@ fn leaves_what_it_cannot_restore() {
     for store in cases {
         let (out, n) = restore(&body, &store);
         assert_eq!(out, body);
-        assert_eq!(n, 0);
+        assert_eq!(n.len(), 0);
     }
 }
 
@@ -213,7 +213,10 @@ fn restores_a_stored_text_whichever_scheme_was_fetched() {
     let body = format!("{NOTICE}\nName: not available\nURL: <{NEW_URL}>\nend");
     let http = NEW_URL.replacen("https://", "http://", 1);
     let store = stored(&[(KEY, with_text(&http, "Hello"))]);
-    assert_eq!(restore(&body, &store), ("Hello\nend".to_string(), 1));
+    assert_eq!(
+        restore(&body, &store),
+        ("Hello\nend".to_string(), vec![http])
+    );
 }
 
 #[test]
@@ -235,7 +238,7 @@ fn restores_two_and_leaves_a_named_part() {
     ]);
     let (out, n) = restore(&body, &store);
     assert_eq!(out, format!("one\n\nmid\n\n{named}\n\ntwo\n"));
-    assert_eq!(n, 2);
+    assert_eq!(n.len(), 2);
 }
 
 #[test]
@@ -268,7 +271,7 @@ fn restore_obscures_what_it_inserts() {
         files,
     };
     let (out, count) = restore(&new_form("\n"), &store);
-    assert_eq!(count, 1);
+    assert_eq!(count.len(), 1);
     assert_eq!(out, "Mail al.smith at example.org\nafter");
 }
 
@@ -281,7 +284,7 @@ fn obscures_a_chain_of_at_signs_in_one_call() {
 fn restored_text_has_lf_line_ends() {
     let store = stored(&[(KEY, with_text(NEW_URL, "one\r\ntwo\rthree\r\n"))]);
     let (out, n) = restore(&new_form("\n"), &store);
-    assert_eq!(n, 1);
+    assert_eq!(n.len(), 1);
     assert_eq!(out, "one\ntwo\nthree\nafter");
 }
 
@@ -294,5 +297,23 @@ fn a_notice_that_climbs_out_of_the_archive_is_not_restored() {
     let body = format!("{NOTICE}\nName: not available\nURL: <{climbing}>\nend");
     assert_eq!(find_scrubbed(&body)[0].key, KEY);
     let store = stored(&[(KEY, with_text(NEW_URL, "Hello"))]);
-    assert_eq!(restore(&body, &store), (body.clone(), 0));
+    assert_eq!(restore(&body, &store), (body.clone(), vec![]));
+}
+
+#[test]
+fn restore_names_what_it_restored() {
+    let second =
+        "https://stat.ethz.ch/pipermail/r-help/attachments/20100210/75317b7f/attachment-0001.pl";
+    let body = format!(
+        "{NOTICE}\nName: not available\nURL: <{NEW_URL}>\nmid\n{NOTICE}\nName: not available\nURL: <{second}>\nend"
+    );
+    // Stored as fetched, over http: the URL named is the stored one.
+    let fetched = second.replacen("https://", "http://", 1);
+    let store = stored(&[(
+        "20100210/75317b7f/attachment-0001.pl",
+        with_text(&fetched, "two"),
+    )]);
+    let (out, restored) = restore(&body, &store);
+    assert!(out.ends_with("mid\ntwo\nend"), "{out}");
+    assert_eq!(restored, [fetched]);
 }

@@ -575,12 +575,13 @@ pub fn run_parse(
                 }
                 if let Some(store) = &period_attachments {
                     let (body, restored) = attachments::restore(&msg.body_plain, store);
-                    if restored > 0 {
+                    if !restored.is_empty() {
                         // Trimmed as `parse_message` trims every body, since
                         // the text may begin or end with blank lines.
                         let body = body.trim().to_string();
                         msg.body_snippet = make_snippet(&body);
                         msg.body_plain = body;
+                        msg.restored_from = restored;
                     }
                 }
                 // After the page has restored the text, so that an address
