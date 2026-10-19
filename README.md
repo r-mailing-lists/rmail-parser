@@ -20,6 +20,7 @@ Or build it from a checkout with `cargo build --release`.
 |---|---|
 | `parse` | Parses raw `.mbox` files into one JSON file per month, with stats unless `--no-stats` is given. |
 | `sources` | Fetches the source's index and message pages and records them in `sources/` files. |
+| `attachments` | Fetches the text Mailman scrubbed out of messages and records it in `attachments/` files. |
 | `stats` | Regenerates the stats files from already-parsed JSON. |
 | `aggregate` | Merges per-list `contributors.json` files into one. |
 | `hash-email` | Prints the de-obfuscated form and the hash of an email address. |
@@ -99,6 +100,26 @@ The first nine count what this run did. The next three count what the period fil
 A run limited by `--max-periods` does not look at older periods again. After a closed period's raw file has been downloaded again, it may have gained or lost messages, so run `sources` once without `--max-periods` before the next `parse --sources`. Otherwise `parse --sources` applies that period's old page numbers to shifted positions when the file has gained messages, and ignores the period file, so the whole period loses its links, when it has lost some.
 
 The command makes one request at a time, identifies itself as `rmail-parser (+https://github.com/r-mailing-lists)`, and stops when its budget is spent or three requests in a row fail. A request the source answers with "not found" counts as a failed one, and neither is ever written down: the period or the message is left as it was and asked for again on the next run. Stopping early is not an error: the command exits 0, every file it wrote is valid, and the next run picks up what is missing. A character is restored only when the source's own page has it. Nothing is guessed.
+
+### `attachments`
+
+Where Mailman scrubbed an unnamed text out of a message, it left a notice with the address of the file. This command fetches those files into one `attachments/<period>.json.gz` per raw file.
+
+```bash
+rmail-parser attachments --raw raw/ --out attachments/ \
+    --base-url https://stat.ethz.ch/pipermail/r-devel/ \
+    --max-requests 3000 --delay-ms 1000
+```
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--raw` | required | Directory of raw `.mbox` files. |
+| `--out` | required | Directory the per-period files are written to. |
+| `--base-url` | required | The list's archive at the source. Only addresses under `<base-url>/attachments/` are fetched, over the scheme of the base URL. |
+| `--max-requests` | 3000 | Requests one run may make. |
+| `--delay-ms` | 1000 | Pause between requests, in milliseconds. |
+
+Only notices at the start of a line, followed by `Name: not available` and an address of the form `YYYYMMDD/xxxxxxxx/attachment.ext`, count. Periods are taken oldest first. Text is stored as UTF-8; bytes that are not valid UTF-8 are read as Windows-1252, and the file records which. A 404 is recorded as `"not found"` and a file over 1 MiB as `"too large"`, and neither is asked for again. A failed request records nothing and is asked for again on a later run. The run stops after 10 failures in a row, prints `warning: <reason>` and still exits 0. The report is printed one count per line.
 
 ### `parse --sources`
 

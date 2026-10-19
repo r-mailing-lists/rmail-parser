@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::io::Read;
 use std::path::Path;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -57,16 +58,42 @@ impl HttpFetcher {
             last_request: None,
         }
     }
-}
 
-impl Fetcher for HttpFetcher {
-    fn get(&mut self, url: &str) -> anyhow::Result<Fetched> {
+    /// Waits until the pause since the last request is over.
+    fn pause(&self) {
         if let Some(last) = self.last_request {
             let since = last.elapsed();
             if since < self.delay {
                 thread::sleep(self.delay - since);
             }
         }
+    }
+
+    /// Fetches `url` as bytes, with the same pause between requests as
+    /// `get`. `Ok(None)` is HTTP 404; any other failure is an error.
+    pub fn get_bytes(&mut self, url: &str) -> anyhow::Result<Option<Vec<u8>>> {
+        self.pause();
+        let result = self.agent.get(url).call();
+        self.last_request = Some(Instant::now());
+        match result {
+            Ok(response) => {
+                let mut bytes = Vec::new();
+                response
+                    .into_reader()
+                    .read_to_end(&mut bytes)
+                    .map_err(|e| anyhow!("could not read the response: {}", e))?;
+                Ok(Some(bytes))
+            }
+            Err(ureq::Error::Status(404, _)) => Ok(None),
+            Err(ureq::Error::Status(code, _)) => Err(anyhow!("HTTP {}", code)),
+            Err(e) => Err(anyhow!("{}", e)),
+        }
+    }
+}
+
+impl Fetcher for HttpFetcher {
+    fn get(&mut self, url: &str) -> anyhow::Result<Fetched> {
+        self.pause();
         let result = self.agent.get(url).call();
         self.last_request = Some(Instant::now());
         match result {

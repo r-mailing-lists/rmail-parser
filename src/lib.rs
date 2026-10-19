@@ -1,4 +1,5 @@
 pub mod addresses;
+pub mod attachment_fetch;
 pub mod attachments;
 pub mod mbox;
 pub mod message;
