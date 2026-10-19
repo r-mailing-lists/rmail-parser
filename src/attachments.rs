@@ -49,13 +49,55 @@ pub struct PeriodAttachments {
     pub files: BTreeMap<String, StoredFile>,
 }
 
+/// What Mailman wrote on the notice's Name line for a part that had no name:
+/// "not available", in the language of the poster. The archives found so far
+/// hold these. The last two are as an ASCII archive has them, with a "?" for
+/// every letter; the language of each is not known.
+const NO_NAME: &[&str] = &[
+    "not available",
+    "no disponible",                  // Spanish
+    "não disponível",                 // Portuguese
+    "inte tillgänglig",               // Swedish
+    "nicht verfügbar",                // German
+    "ikke tilgjengelig",              // Norwegian
+    "nem elérhető",                   // Hungarian
+    "ei saatavilla",                  // Finnish
+    "Negalima",                       // Lithuanian
+    "nie znany",                      // Polish
+    "[Žádný popis není k dispozici]", // Czech
+    "?????? ?? ????????.",
+    "???????????",
+];
+
+/// `NO_NAME` as one alternation. A letter outside ASCII also matches a "?",
+/// which is how an ASCII archive wrote it, and one or two letters outside
+/// ASCII, which is how UTF-8 read as Windows-1252 comes out.
+fn no_name_pattern() -> String {
+    NO_NAME
+        .iter()
+        .map(|name| {
+            name.chars()
+                .map(|c| {
+                    if c.is_ascii() {
+                        regex::escape(&c.to_string())
+                    } else {
+                        r"(?:\?|[^\x00-\x7F]{1,2})".to_string()
+                    }
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
 fn notice_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         let url = r"https?://[^\s<>]*?/attachments/(\d{8}/[0-9a-f]{8}/attachment(?:-\d+)?\.[A-Za-z0-9]+)";
         Regex::new(&format!(
-            r"(?m)^{notice}\r?\nName: not available\r?\n(?:URL: <(?P<new>{url})>|Url: (?P<old>{url}))[ \t]*\r?$",
+            r"(?m)^{notice}\r?\nName: (?:{no_name})\r?\n(?:URL: <(?P<new>{url})>|Url: (?P<old>{url}))[ \t]*\r?$",
             notice = regex::escape(NOTICE),
+            no_name = no_name_pattern(),
             url = url,
         ))
         .expect("notice regex")
@@ -89,8 +131,8 @@ fn lf_line_ends(text: &str) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
-/// Finds the notices whose part has no name and whose URL points at a file
-/// under `/attachments/`. A notice quoted with `>` is not at the start of
+/// Finds the notices whose part has no name (see `NO_NAME`) and whose URL
+/// points at a file under `/attachments/`. A notice quoted with `>` is not at the start of
 /// its line and is left out. Which host the URL belongs to is not checked.
 pub fn find_scrubbed(text: &str) -> Vec<Scrubbed> {
     notice_regex()
