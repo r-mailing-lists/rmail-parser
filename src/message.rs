@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, FixedOffset};
-use mailparse::{parse_mail, MailHeaderMap};
+use mailparse::{parse_mail, MailHeaderMap, ParsedMail};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -163,6 +163,34 @@ pub fn extract_email_for_hash(from: &str) -> String {
     deobfuscate_email(from)
 }
 
+/// The text of a message's body.
+///
+/// The mbox file has been read as text already (see
+/// [`read_file_lossy`](crate::pipeline::read_file_lossy)), so a body sent
+/// without a transfer encoding is that text, whatever charset its headers
+/// name. A pipermail text archive keeps no Content-Type at all, and mailparse
+/// would then take the bytes for US-ASCII, which it reads as Windows-1252,
+/// and write every "é" as "Ã©". Only a body in base64 or quoted-printable
+/// has bytes of its own, in the charset the headers name. A byte order mark
+/// at the start is dropped, as the decoder for a named charset drops it.
+fn body_text(parsed: &ParsedMail) -> String {
+    let transfer_encoded = parsed
+        .headers
+        .get_first_value("Content-Transfer-Encoding")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "base64" | "quoted-printable"))
+        .unwrap_or(false);
+    if transfer_encoded {
+        return parsed.get_body().unwrap_or_default();
+    }
+    parsed
+        .get_body_raw()
+        .map(|bytes| {
+            let text = String::from_utf8_lossy(&bytes);
+            text.strip_prefix('\u{feff}').unwrap_or(&text).to_string()
+        })
+        .unwrap_or_default()
+}
+
 /// Parses a raw email string (from the mbox splitter) into a structured Message.
 ///
 /// The raw string may start with a "From " mbox envelope line, which is skipped.
@@ -231,11 +259,7 @@ pub fn parse_message(raw: &str) -> Result<Message> {
     let id = generate_message_id(&message_id);
 
     // Extract body
-    let body_plain = parsed
-        .get_body()
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let body_plain = body_text(&parsed).trim().to_string();
 
     let body_snippet = make_snippet(&body_plain);
 

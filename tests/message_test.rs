@@ -143,3 +143,70 @@ Body."#;
     assert_eq!(msg.thread_id, "");
     assert_eq!(msg.thread_depth, 0);
 }
+
+#[test]
+fn test_body_without_mime_headers_keeps_its_letters() {
+    // A pipermail text archive keeps no Content-Type, and the file has
+    // already been read as text: the body is that text, accents and all.
+    let raw = "From ana at example.org  Mon Mar  7 10:00:00 2016\n\
+               From: ana at example.org (Ana)\n\
+               Date: Mon, 7 Mar 2016 10:00:00 -0300\n\
+               Subject: [R-br] =?iso-8859-1?q?fun=E7=E3o?=\n\
+               Message-ID: <acc1@example.org>\n\
+               \n\
+               Função não é\n";
+
+    let msg = parse_message(raw).unwrap();
+    assert_eq!(msg.subject, "[R-br] função");
+    assert_eq!(msg.body_plain, "Função não é");
+}
+
+#[test]
+fn test_body_whose_headers_name_a_charset_keeps_its_letters() {
+    // The headers name the charset the message was sent in, but the file
+    // has been read as text already, so the body is not decoded again.
+    let raw = "From bia at example.org  Mon Mar  7 11:00:00 2016\n\
+               From: bia at example.org (Bia)\n\
+               Date: Mon, 7 Mar 2016 11:00:00 -0300\n\
+               Subject: teste\n\
+               Message-ID: <acc2@example.org>\n\
+               Content-Type: text/plain; charset=iso-8859-1\n\
+               \n\
+               Função não é\n";
+
+    let msg = parse_message(raw).unwrap();
+    assert_eq!(msg.body_plain, "Função não é");
+}
+
+#[test]
+fn test_body_in_quoted_printable_is_decoded_in_its_charset() {
+    let raw = "From cai at example.org  Mon Mar  7 12:00:00 2016\n\
+               From: cai at example.org (Cai)\n\
+               Date: Mon, 7 Mar 2016 12:00:00 -0300\n\
+               Subject: teste\n\
+               Message-ID: <acc3@example.org>\n\
+               Content-Type: text/plain; charset=iso-8859-1\n\
+               Content-Transfer-Encoding: quoted-printable\n\
+               \n\
+               Fun=E7=E3o n=E3o =E9\n";
+
+    let msg = parse_message(raw).unwrap();
+    assert_eq!(msg.body_plain, "Função não é");
+}
+
+#[test]
+fn test_byte_order_mark_at_the_start_of_a_body_is_dropped() {
+    let raw = "From dan at example.org  Mon Mar  7 13:00:00 2016\n\
+               From: Dan <dan@example.org>\n\
+               Date: Mon, 7 Mar 2016 13:00:00 -0300\n\
+               Subject: teste\n\
+               Message-ID: <acc4@example.org>\n\
+               Content-Type: text/plain; charset=\"utf-8\"\n\
+               Content-Transfer-Encoding: 8bit\n\
+               \n\
+               \u{feff}\n\
+               Função\n";
+
+    let msg = parse_message(raw).unwrap();
+    assert_eq!(msg.body_plain, "Função");
+}

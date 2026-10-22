@@ -22,9 +22,12 @@ use crate::threading::reconstruct_threads;
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Reads a file as a UTF-8 string, falling back to Windows-1252 (Latin-1 superset)
-/// if the file is not valid UTF-8. This handles old mbox files that contain
-/// raw 8-bit characters from various European encodings.
+/// Reads a file as a UTF-8 string. A file that is not valid UTF-8 is read
+/// line by line: a list's monthly file holds each message in the bytes it
+/// arrived in, so one file can mix UTF-8 messages with Latin-1 ones and be
+/// valid in neither. A line that is valid UTF-8 is kept as it is, and any
+/// other is read as Windows-1252 (a Latin-1 superset); Latin-1 text with
+/// accents is almost never valid UTF-8 by chance.
 pub fn read_file_lossy(path: &Path) -> Result<String> {
     let bytes =
         fs::read(path).with_context(|| format!("Failed to read {}", path.display()))?;
@@ -33,18 +36,21 @@ pub fn read_file_lossy(path: &Path) -> Result<String> {
         Ok(s) => Ok(s),
         Err(e) => {
             eprintln!(
-                "Warning: {} is not valid UTF-8, falling back to Windows-1252",
+                "Warning: {} is not valid UTF-8, reading the lines that are not as Windows-1252",
                 path.display()
             );
             let bytes = e.into_bytes();
-            let (cow, _encoding, had_errors) = WINDOWS_1252.decode(&bytes);
-            if had_errors {
-                eprintln!(
-                    "Warning: some characters in {} could not be decoded",
-                    path.display()
-                );
+            let mut text = String::with_capacity(bytes.len());
+            for (i, line) in bytes.split(|b| *b == b'\n').enumerate() {
+                if i > 0 {
+                    text.push('\n');
+                }
+                match std::str::from_utf8(line) {
+                    Ok(line) => text.push_str(line),
+                    Err(_) => text.push_str(&WINDOWS_1252.decode_without_bom_handling(line).0),
+                }
             }
-            Ok(cow.into_owned())
+            Ok(text)
         }
     }
 }
