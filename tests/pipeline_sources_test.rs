@@ -315,6 +315,34 @@ fn test_a_message_linked_in_both_period_files_keeps_the_first() {
 }
 
 #[test]
+fn test_a_later_copy_in_the_same_file_neither_takes_a_page_nor_replaces_the_first() {
+    let raw = scratch_dir("copy-raw");
+    // The period was archived twice: the text file has the message again,
+    // with the address in its From line mangled.
+    let first = raw_message(7, "[Rd] Topic A", "A na?ve question.");
+    let copy = first.replace("(User 7)", "(U|er 7)");
+    fs::write(raw.join("2026-February.mbox"), first + &copy).unwrap();
+    let sources_dir = scratch_dir("copy-sources");
+    // Written by an earlier version, which gave the page to the copy.
+    sources::save(
+        &sources_dir,
+        &period(
+            "2026-February",
+            &[None, Some("000101")],
+            &[("000101", "\u{ef}")],
+        ),
+    )
+    .unwrap();
+
+    let messages = parse_month(&raw, &sources_dir, "copy", "2026-02");
+
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].from_name, "User 7");
+    assert_eq!(messages[0].source_url, None);
+    assert_eq!(messages[0].body_plain, "A na?ve question.");
+}
+
+#[test]
 fn test_a_sources_file_for_a_longer_raw_file_is_ignored() {
     let raw = scratch_dir("shrunk-raw");
     fs::write(

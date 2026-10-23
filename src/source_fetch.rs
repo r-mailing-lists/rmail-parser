@@ -382,9 +382,26 @@ fn update_period(
         .map(|raw| parse_message(raw).ok())
         .collect();
 
+    let later = sources::later_copies(
+        parsed
+            .iter()
+            .map(|msg| msg.as_ref().map(|msg| msg.message_id.as_str())),
+    );
+    let firsts: Vec<usize> = (0..raw_messages.len()).filter(|&i| !later[i]).collect();
+
     let mut current = match sources::load(out_dir, period)? {
-        Some(known) if known.articles.len() == raw_messages.len() => known,
-        // No file yet, or the raw file has changed length since: index it.
+        Some(known)
+            if known.articles.len() == raw_messages.len()
+                && !known
+                    .articles
+                    .iter()
+                    .zip(&later)
+                    .any(|(a, later)| *later && a.is_some()) =>
+        {
+            known
+        }
+        // No file yet, the raw file has changed length since, or the file
+        // gives a later copy a page, as versions before 0.13.0 could: index it.
         stale => {
             let url = format!("{}/{}/date.html", base, period);
             let index = match budget.ask(&url, non_empty_index) {
@@ -402,22 +419,28 @@ fn update_period(
                 }
             };
             report.periods_indexed += 1;
-            if index.len() != raw_messages.len() {
+            if index.len() != firsts.len() {
                 eprintln!(
                     "Note: {}: the index lists {} pages and the raw file has {} messages",
                     period,
                     index.len(),
-                    raw_messages.len()
+                    firsts.len()
                 );
             }
-            if index.len() > raw_messages.len() {
+            if index.len() > firsts.len() {
                 report.index_ahead += 1;
             }
-            let keys: Vec<String> = raw_messages
+            // Only first copies are matched. A later copy has the same
+            // subject as its first, and either could take the page; the
+            // first is the message as it was sent.
+            let keys: Vec<String> = firsts
                 .iter()
-                .map(|raw| subject_key(&raw_subject(raw)))
+                .map(|&i| subject_key(&raw_subject(raw_messages[i])))
                 .collect();
-            let mut articles = align(&keys, &index);
+            let mut articles = vec![None; raw_messages.len()];
+            for (&i, article) in firsts.iter().zip(align(&keys, &index)) {
+                articles[i] = article;
+            }
             // A page already fetched stays fetched for as long as the index
             // lists it, whether or not a message is linked to it just now:
             // the index can be ahead of the raw file, and the messages it
@@ -440,6 +463,23 @@ fn update_period(
                         *article = None;
                     }
                 }
+            }
+            // A period archived a second time can have its pages numbered
+            // in another order than its raw file: the copies that made them
+            // were archived later, among other periods' messages. Matched
+            // in page order, its messages then go to the wrong pages about
+            // as often as they find none. When more than a fifth of them
+            // find none, the order is not the raw file's, and the period
+            // gets no links at all: no link is better than a wrong one.
+            let unlinked = firsts.iter().filter(|&&i| articles[i].is_none()).count();
+            if firsts.len() < raw_messages.len() && unlinked * 5 > firsts.len() {
+                eprintln!(
+                    "Note: {}: archived more than once, and {} of its {} messages found no page in the index's order; leaving the period without links",
+                    period,
+                    unlinked,
+                    firsts.len()
+                );
+                articles.iter_mut().for_each(|article| *article = None);
             }
             let indexed = PeriodSources {
                 period: period.to_string(),
