@@ -573,10 +573,21 @@ pub fn run_parse(
             })
             .collect();
 
+        // A later copy of a message in the same raw file never takes a page,
+        // even from a period file an earlier version wrote: the first copy
+        // is the message as it was sent, and its page is its own.
+        let later = sources::later_copies(
+            parsed
+                .iter()
+                .map(|msg| msg.as_ref().map(|msg| msg.message_id.as_str())),
+        );
+
         let mut messages: Vec<Message> = Vec::with_capacity(parsed.len());
         for (position, slot) in parsed.into_iter().enumerate() {
             if let Some(mut msg) = slot {
-                if let (Some(period), Some((_, base_url))) = (&period_sources, source_pages) {
+                if let (Some(period), Some((_, base_url)), false) =
+                    (&period_sources, source_pages, later[position])
+                {
                     apply_source(&mut msg, period, position, base_url);
                 }
                 if let Some(store) = &period_attachments {
@@ -610,7 +621,10 @@ pub fn run_parse(
         }
 
         // Add messages to the accumulator, deduplicating by id. The first
-        // copy of a message wins, unless only a later copy found its page.
+        // copy of a message wins. A copy in a later file replaces it only
+        // when that copy alone found its page, as a message filed under two
+        // periods can; a later copy in the same file has no page, so it
+        // never replaces the first.
         for msg in messages {
             match all_by_month
                 .entry(msg.month.clone())

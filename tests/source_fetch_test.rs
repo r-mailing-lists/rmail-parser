@@ -1595,3 +1595,206 @@ fn test_a_period_on_file_is_counted_when_its_index_does_not_arrive() {
     assert_eq!(report.messages, 1);
     assert_eq!(report.unlinked, 0);
 }
+
+/// The copy of message `n` that a second archiving of the period left in
+/// the text file: the same Message-ID, the address in its From line mangled.
+fn later_copy(n: usize, subject: &str, body: &str) -> String {
+    raw_message(n, subject, body).replace(&format!("(User {n})"), &format!("(U|er {n})"))
+}
+
+/// Five messages with subjects A to E, then a later copy of each.
+fn archived_twice() -> String {
+    let subjects = ["Topic A", "Topic B", "Topic C", "Topic D", "Topic E"];
+    let firsts: String = subjects
+        .iter()
+        .enumerate()
+        .map(|(i, s)| raw_message(i + 1, &format!("[Rd] {s}"), "Plain text."))
+        .collect();
+    let copies: String = subjects
+        .iter()
+        .enumerate()
+        .map(|(i, s)| later_copy(i + 1, &format!("[Rd] {s}"), "Plain text."))
+        .collect();
+    firsts + &copies
+}
+
+#[test]
+fn test_only_the_first_copy_of_a_message_is_matched_with_a_page() {
+    let raw = scratch_dir("copies-raw");
+    let out = scratch_dir("copies-out");
+    fs::write(
+        raw.join("2026-February.mbox"),
+        raw_message(1, "[Rd] Topic A", "Plain text.")
+            + &raw_message(2, "[Rd] Topic B", "Plain text.")
+            + &later_copy(1, "[Rd] Topic A", "Plain text.")
+            + &later_copy(2, "[Rd] Topic B", "Plain text."),
+    )
+    .unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic B")]),
+    );
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(
+        pages(&saved(&out, "2026-February")),
+        [Some("000101"), Some("000102"), None, None]
+    );
+    // One page for each message: the index is not ahead of the raw file.
+    assert_eq!(report.index_ahead, 0);
+}
+
+#[test]
+fn test_a_period_file_that_gives_a_later_copy_a_page_is_indexed_again() {
+    let raw = scratch_dir("stale-copies-raw");
+    let out = scratch_dir("stale-copies-out");
+    fs::write(
+        raw.join("2026-February.mbox"),
+        raw_message(1, "[Rd] Topic A", "A na?ve question.")
+            + &raw_message(2, "[Rd] Topic B", "Plain text.")
+            + &later_copy(1, "[Rd] Topic A", "A na?ve question.")
+            + &later_copy(2, "[Rd] Topic B", "Plain text."),
+    )
+    .unwrap();
+    // What an earlier version wrote: the pages went to the later copies.
+    let mut stale = PeriodSources {
+        period: "2026-February".to_string(),
+        articles: vec![None, None, Some("000101".into()), Some("000102".into())],
+        fixes: Default::default(),
+        rejected: Default::default(),
+    };
+    stale.fixes.insert("000101".into(), "\u{ef}".into());
+    sources::save(&out, &stale).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic B")]),
+    );
+
+    let report = run(&raw, &out, &mut source);
+
+    // The index again, and no page: the fix on file still holds.
+    assert_eq!(source.asked_paths(), ["2026-February/date.html"]);
+    assert_eq!(report.periods_indexed, 1);
+    let again = saved(&out, "2026-February");
+    assert_eq!(pages(&again), [Some("000101"), Some("000102"), None, None]);
+    assert_eq!(again.fixes["000101"], "\u{ef}");
+
+    // Written the new way, the file is not indexed a third time.
+    let mut source = FakeFetcher::new();
+    run(&raw, &out, &mut source);
+    assert!(source.asked.is_empty());
+}
+
+#[test]
+fn test_a_period_archived_twice_in_another_order_gets_no_links() {
+    let raw = scratch_dir("reordered-raw");
+    let out = scratch_dir("reordered-out");
+    fs::write(raw.join("2026-February.mbox"), archived_twice()).unwrap();
+    // The pages were numbered when the copies were archived again, in an
+    // order the raw file does not have.
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[
+            ("000101", "[Rd] Topic E"),
+            ("000102", "[Rd] Topic D"),
+            ("000103", "[Rd] Topic C"),
+            ("000104", "[Rd] Topic B"),
+            ("000105", "[Rd] Topic A"),
+        ]),
+    );
+
+    let report = run(&raw, &out, &mut source);
+
+    assert_eq!(report.periods_indexed, 1);
+    assert_eq!(pages(&saved(&out, "2026-February")), [None; 10]);
+    assert_eq!(report.unlinked, 10);
+}
+
+#[test]
+fn test_a_period_archived_twice_keeps_its_links_when_few_messages_lack_a_page() {
+    let raw = scratch_dir("twice-few-raw");
+    let out = scratch_dir("twice-few-out");
+    fs::write(raw.join("2026-February.mbox"), archived_twice()).unwrap();
+    // One message of five has no page: a fifth, and not more.
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[
+            ("000101", "[Rd] Topic A"),
+            ("000102", "[Rd] Topic B"),
+            ("000103", "[Rd] Topic C"),
+            ("000104", "[Rd] Topic D"),
+        ]),
+    );
+
+    run(&raw, &out, &mut source);
+
+    let mut expected = vec![
+        Some("000101"),
+        Some("000102"),
+        Some("000103"),
+        Some("000104"),
+    ];
+    expected.extend([None; 6]);
+    assert_eq!(pages(&saved(&out, "2026-February")), expected);
+}
+
+#[test]
+fn test_a_period_archived_once_keeps_the_links_it_found_however_few() {
+    let raw = scratch_dir("once-reordered-raw");
+    let out = scratch_dir("once-reordered-out");
+    let firsts: String = ["A", "B", "C", "D", "E"]
+        .iter()
+        .enumerate()
+        .map(|(i, s)| raw_message(i + 1, &format!("[Rd] Topic {s}"), "Plain text."))
+        .collect();
+    fs::write(raw.join("2026-February.mbox"), firsts).unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[
+            ("000101", "[Rd] Topic E"),
+            ("000102", "[Rd] Topic D"),
+            ("000103", "[Rd] Topic C"),
+            ("000104", "[Rd] Topic B"),
+            ("000105", "[Rd] Topic A"),
+        ]),
+    );
+
+    let report = run(&raw, &out, &mut source);
+
+    // Pages in their own order are what the matching expects of a period
+    // archived once; whatever it pairs stays paired.
+    assert_eq!(report.unlinked, 4);
+}
+
+#[test]
+fn test_messages_without_a_message_id_are_not_copies_of_each_other() {
+    let raw = scratch_dir("no-id-raw");
+    let out = scratch_dir("no-id-out");
+    let without_id = |n: usize, subject: &str| {
+        raw_message(n, subject, "Plain text.")
+            .replace(&format!("Message-ID: <m{n}@example.org>\n"), "")
+    };
+    fs::write(
+        raw.join("2026-February.mbox"),
+        without_id(1, "[Rd] Topic A") + &without_id(2, "[Rd] Topic B"),
+    )
+    .unwrap();
+    let mut source = FakeFetcher::new();
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "[Rd] Topic B")]),
+    );
+
+    run(&raw, &out, &mut source);
+
+    assert_eq!(
+        pages(&saved(&out, "2026-February")),
+        [Some("000101"), Some("000102")]
+    );
+}

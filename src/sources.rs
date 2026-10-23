@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -122,6 +122,28 @@ pub fn save(dir: &Path, s: &PeriodSources) -> Result<()> {
         let _ = fs::remove_file(&tmp);
     }
     written
+}
+
+/// Marks each message that repeats an earlier message of the same raw file,
+/// by Message-ID. A source that archived a period a second time has every
+/// message of it twice in the text file, the later copy sometimes with its
+/// From line mangled, and still one page for each message. Only the first
+/// copy stands for the message: a later one is never matched with a page.
+/// `None` is a message that did not parse; it, and a message without a
+/// Message-ID, is a copy of nothing.
+pub fn later_copies<'a>(message_ids: impl IntoIterator<Item = Option<&'a str>>) -> Vec<bool> {
+    let mut seen = HashSet::new();
+    message_ids
+        .into_iter()
+        .map(|id| {
+            let id = id
+                .unwrap_or_default()
+                .trim()
+                .trim_start_matches('<')
+                .trim_end_matches('>');
+            !id.is_empty() && !seen.insert(id)
+        })
+        .collect()
 }
 
 /// True when the body has a `?` with a letter directly on both sides, which

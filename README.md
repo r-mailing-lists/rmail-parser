@@ -50,7 +50,7 @@ rmail-parser sources --raw raw/ --out sources/ \
 | `--delay-ms` | 1000 | Pause between requests, in milliseconds. |
 | `--max-periods` | every period | Look at this many periods only, newest first. |
 
-For each period, newest first, the command fetches `<period>/date.html` when the period has no file yet or its raw file has changed length, and pairs the raw file's messages with the index entries. It then fetches the page of every message whose body has a `?` between two letters. Each period gets one file:
+For each period, newest first, the command fetches `<period>/date.html` when the period has no file yet, its raw file has changed length, or its file gives a page to a later copy of a message (see below), and pairs the raw file's messages with the index entries. It then fetches the page of every message whose body has a `?` between two letters. Each period gets one file:
 
 ```json
 {
@@ -74,6 +74,8 @@ For each period, newest first, the command fetches `<period>/date.html` when the
 `articles[i]` is the page number of the i-th message in the raw file, or `null` where no page could be matched. `fixes` has an entry for every page that has been fetched: one character for each `?` in that message's body, in order, which is either the character to restore or `?` to leave it alone. An empty string means the page had nothing to restore.
 
 `rejected` has an entry for every page that was fetched and named another Message-ID than the message it had been paired with: the page number, and the Message-ID the page names. That message loses its link, and when the period is indexed again the page is linked only to the message it names. A file without the `rejected` field was written by a version before 0.10.0. `parse --sources` refuses it, and so does `sources` when it reads it; a run limited by `--max-periods` does not read the files of older periods. Delete such a file and let `sources` write it again.
+
+A source that archived a period a second time has each of its messages twice in the text file, the later copy sometimes with its From line mangled, and still one page per message. Only the first copy of each Message-ID in a raw file is paired with a page: a later copy's entry in `articles` is always `null`. The second archiving can also have numbered the pages in an order the raw file does not have, which pairing by subject cannot see through. When a period holds later copies and more than a fifth of its first copies find no page, every entry of the period is `null`. A file written before 0.13.0 that gives a later copy a page is indexed again.
 
 With `--max-periods 2` the command looks at the two newest periods that have messages and leaves every older one exactly as it is. A daily run passes it, so that it never walks into a list's history; a run without it takes every period, newest first, until its budget is spent.
 
@@ -128,7 +130,7 @@ rmail-parser parse --input raw/ --output processed/ --list r-devel \
     --sources sources/ --base-url https://stat.ethz.ch/pipermail/r-devel/
 ```
 
-`--sources` and `--base-url` must be given together. Each message with a known page gains a `source_url` of the form `<base-url>/<period>/<number>.html`, and its body and snippet carry the restored characters. Without the two flags, or for a raw file that has no `sources/` file, the output is what it has always been and has no `source_url` field.
+`--sources` and `--base-url` must be given together. Each message with a known page gains a `source_url` of the form `<base-url>/<period>/<number>.html`, and its body and snippet carry the restored characters. A later copy of a message in the same raw file gains nothing, whatever its period file says, and never replaces the first copy. Without the two flags, or for a raw file that has no `sources/` file, the output is what it has always been and has no `source_url` field.
 
 ### `parse --attachments`
 
