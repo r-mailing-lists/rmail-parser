@@ -36,6 +36,8 @@ fn sample() -> PeriodSources {
         ],
         fixes,
         rejected,
+        pending: Vec::new(),
+        parents_rechecked: false,
     }
 }
 

@@ -12,6 +12,14 @@ pub struct IndexEntry {
 /// Reads the entries of a `date.html` index page, sorted by page number as a
 /// number. The page lists them by date, which is not always the same order.
 pub fn parse_index(html: &str) -> Vec<IndexEntry> {
+    let mut entries = parse_index_by_date(html);
+    entries.sort_by_key(|e| e.number.parse::<u64>().unwrap_or(u64::MAX));
+    entries
+}
+
+/// Reads the entries of a `date.html` index page in the order it lists them,
+/// which is by date.
+pub fn parse_index_by_date(html: &str) -> Vec<IndexEntry> {
     const ENTRY: &str = "<LI><A HREF=\"";
     let mut entries = Vec::new();
     let mut rest = html;
@@ -21,7 +29,6 @@ pub fn parse_index(html: &str) -> Vec<IndexEntry> {
             entries.push(entry);
         }
     }
-    entries.sort_by_key(|e| e.number.parse::<u64>().unwrap_or(u64::MAX));
     entries
 }
 

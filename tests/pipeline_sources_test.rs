@@ -19,6 +19,8 @@ fn period(name: &str, articles: &[Option<&str>], fixes: &[(&str, &str)]) -> Peri
             .map(|(number, fix)| (number.to_string(), fix.to_string()))
             .collect::<BTreeMap<_, _>>(),
         rejected: BTreeMap::new(),
+        pending: Vec::new(),
+        parents_rechecked: false,
     }
 }
 

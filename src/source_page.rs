@@ -236,3 +236,60 @@ fn find_spot(page: &[char], from: usize, left: &[char], right: &[char]) -> Optio
             && fits(right, &page[spot + 1..spot + 1 + right.len()])
     })
 }
+
+/// How long a line of a body has to be, spaces folded, to count in
+/// `page_shows`: shorter ones ("Thanks,", a signature) are in many messages.
+const SHOWN_LINE: usize = 20;
+
+/// The most lines of a body `page_shows` looks for.
+const SHOWN_LINES: usize = 10;
+
+/// Whether `page_text` shows the message whose body is `body`: at least half
+/// of the body's own lines of `SHOWN_LINE` characters or more (quoted lines
+/// left out, at most `SHOWN_LINES` of them) are in the page, with every `?`
+/// of the body matching any one character. A body with no such line is
+/// looked for whole, if it has that many characters. The page and the text
+/// file write addresses differently, which is why half the lines and not all
+/// of them are asked for.
+///
+/// A page archived before about 2008 names in its reply link the Message-ID
+/// the message answers, not its own, so it cannot say whose it is. Its text
+/// can.
+pub fn page_shows(body: &str, page_text: &str) -> bool {
+    let fold = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let page: Vec<char> = fold(page_text).chars().collect();
+    let mut lines: Vec<Vec<char>> = body
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('>'))
+        .map(fold)
+        .filter(|line| line.chars().count() >= SHOWN_LINE)
+        .map(|line| line.chars().collect())
+        .take(SHOWN_LINES)
+        .collect();
+    if lines.is_empty() {
+        let whole = fold(body);
+        if whole.chars().count() < SHOWN_LINE {
+            return false;
+        }
+        lines.push(whole.chars().collect());
+    }
+    let found = lines
+        .iter()
+        .filter(|line| contains_with_wildcards(&page, line))
+        .count();
+    found * 2 >= lines.len()
+}
+
+/// Whether `needle` occurs in `haystack`, a `?` in the needle matching any
+/// one character.
+fn contains_with_wildcards(haystack: &[char], needle: &[char]) -> bool {
+    if needle.len() > haystack.len() {
+        return false;
+    }
+    (0..=haystack.len() - needle.len()).any(|start| {
+        needle
+            .iter()
+            .zip(&haystack[start..])
+            .all(|(n, h)| *n == '?' || n == h)
+    })
+}

@@ -24,6 +24,20 @@ pub struct PeriodSources {
     /// no default: a file written before it existed is refused, not read as
     /// a file with nothing rejected.
     pub rejected: BTreeMap<String, String>,
+    /// For a period archived more than once, whose pages are numbered in
+    /// another order than its raw file: the page each first copy was paired
+    /// with in the order the index lists them, which is by date, and not yet
+    /// confirmed. A pairing moves to `articles` once its page has been
+    /// fetched and is the message's, and is dropped when the page belongs to
+    /// another; until then the message has no link. Left out when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending: Vec<Option<String>>,
+    /// Whether the rejections were looked at again for pages that name the
+    /// message's parent. A page archived before about 2008 names in its
+    /// reply link the Message-ID the message answers rather than its own,
+    /// and versions before 0.14.0 took that for another message's page.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub parents_rechecked: bool,
 }
 
 const MONTHS: [&str; 12] = [

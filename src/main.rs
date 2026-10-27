@@ -258,6 +258,7 @@ fn print_sources_report(report: &SourcesReport) {
     eprintln!("Characters restored:           {}", report.chars_restored);
     eprintln!("? left as they were:           {}", report.chars_left);
     eprintln!("Pages naming another message:  {}", report.mismatches);
+    eprintln!("Pairings by date confirmed:    {}", report.confirmed);
     eprintln!("Characters beyond U+FFFF seen: {}", report.astral_chars);
     eprintln!("Requests that failed:          {}", report.failed);
     eprintln!("Pages the source did not have: {}", report.not_found);
@@ -265,6 +266,7 @@ fn print_sources_report(report: &SourcesReport) {
     eprintln!("Messages in periods looked at: {}", report.messages);
     eprintln!("Messages without a link:       {}", report.unlinked);
     eprintln!("Rejected pairings on file:     {}", report.rejected);
+    eprintln!("Pairings waiting for a page:   {}", report.pending);
     eprintln!("Older periods not looked at:   {}", report.periods_skipped);
     let complete = report.failed == 0 && report.not_found == 0;
     match &report.stopped {

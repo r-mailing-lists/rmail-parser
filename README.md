@@ -75,7 +75,11 @@ For each period, newest first, the command fetches `<period>/date.html` when the
 
 `rejected` has an entry for every page that was fetched and named another Message-ID than the message it had been paired with: the page number, and the Message-ID the page names. That message loses its link, and when the period is indexed again the page is linked only to the message it names. A file without the `rejected` field was written by a version before 0.10.0. `parse --sources` refuses it, and so does `sources` when it reads it; a run limited by `--max-periods` does not read the files of older periods. Delete such a file and let `sources` write it again.
 
+A page archived before about 2008 names in its reply link the Message-ID its message answers, not its own. Since 0.14.0 a page that names the parent of the message it is paired with is that message's when it shows its text: at least half of the body's own longer lines, with every `?` matching any one character. Versions before took such a page for another message's and rejected it. A file with a rejection that names a message's parent is indexed again once, the rejection is dropped, and the page is fetched again and judged by its text. `parents_rechecked` in a file says that was done.
+
 A source that archived a period a second time has each of its messages twice in the text file, the later copy sometimes with its From line mangled, and still one page per message. Only the first copy of each Message-ID in a raw file is paired with a page: a later copy's entry in `articles` is always `null`. The second archiving can also have numbered the pages in an order the raw file does not have, which pairing by subject cannot see through. When a period holds later copies and more than a fifth of its first copies find no page, every entry of the period is `null`. A file written before 0.13.0 that gives a later copy a page is indexed again.
+
+Since 0.14.0 such a period's first copies are paired again with its index in the order the index lists them, which is by date. Each of those pairings waits in `pending` (one entry per raw message, as in `articles`, and left out of the file when empty) until its page has been fetched: a page that names the message, or shows its text, moves the pairing to `articles`, and any other page is rejected. Until then the message has no link, so `parse --sources` publishes only pairings that were confirmed.
 
 With `--max-periods 2` the command looks at the two newest periods that have messages and leaves every older one exactly as it is. A daily run passes it, so that it never walks into a list's history; a run without it takes every period, newest first, until its budget is spent.
 
@@ -87,6 +91,7 @@ Pages fetched:                 N
 Characters restored:           N
 ? left as they were:           N
 Pages naming another message:  N
+Pairings by date confirmed:    N
 Characters beyond U+FFFF seen: N
 Requests that failed:          N
 Pages the source did not have: N
@@ -94,10 +99,11 @@ Indexes ahead of the raw file: N
 Messages in periods looked at: N
 Messages without a link:       N
 Rejected pairings on file:     N
+Pairings waiting for a page:   N
 Older periods not looked at:   N
 ```
 
-The first nine count what this run did. The next three count what the period files say after the run, for the periods the run looked at and has a file for: positions, positions with no page, and rejected pairings. `Older periods not looked at` is 0 unless `--max-periods` is given, and a limited run that stops early still counts the periods it would have left alone. The report ends with one more line: `Stopped early: <reason>`, `Every period is up to date`, `The periods looked at are up to date` (a limited run that fetched everything it looked at) or `Not everything was fetched; the next run will ask again`.
+The first ten count what this run did. The next four count what the period files say after the run, for the periods the run looked at and has a file for: positions, positions with no page, rejected pairings, and pairings by date that wait for their page. `Older periods not looked at` is 0 unless `--max-periods` is given, and a limited run that stops early still counts the periods it would have left alone. The report ends with one more line: `Stopped early: <reason>`, `Every period is up to date`, `The periods looked at are up to date` (a limited run that fetched everything it looked at) or `Not everything was fetched; the next run will ask again`.
 
 A run limited by `--max-periods` does not look at older periods again. After a closed period's raw file has been downloaded again, it may have gained or lost messages, so run `sources` once without `--max-periods` before the next `parse --sources`. Otherwise `parse --sources` applies that period's old page numbers to shifted positions when the file has gained messages, and ignores the period file, so the whole period loses its links, when it has lost some.
 
