@@ -20,6 +20,11 @@ const USER_AGENT: &str = "rmail-parser (+https://github.com/r-mailing-lists)";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// The largest page `HttpFetcher::get` reads. ureq's own `into_string`
+/// stops at 10 MB, and one message page of r-sig-mixed-models (2013q3,
+/// 021019.html) is past that: its whole attachment is written into it.
+const MAX_PAGE_BYTES: u64 = 64 * 1024 * 1024;
+
 /// A period's file is written after this many pages at the latest, so a run
 /// that is cut short keeps what it fetched.
 const SAVE_EVERY: usize = 50;
@@ -139,10 +144,19 @@ impl Fetcher for HttpFetcher {
                 // The pages are ASCII with numeric entities. A stray byte in
                 // some other encoding comes out as U+FFFD, which is never
                 // taken as a fix.
-                let body = response
-                    .into_string()
+                let mut bytes = Vec::new();
+                response
+                    .into_reader()
+                    .take(MAX_PAGE_BYTES + 1)
+                    .read_to_end(&mut bytes)
                     .map_err(|e| anyhow!("could not read the response: {}", e))?;
-                Ok(Fetched::Body(body))
+                if bytes.len() as u64 > MAX_PAGE_BYTES {
+                    return Err(anyhow!(
+                        "could not read the response: over {} MB",
+                        MAX_PAGE_BYTES / (1024 * 1024)
+                    ));
+                }
+                Ok(Fetched::Body(String::from_utf8_lossy(&bytes).into_owned()))
             }
             Err(ureq::Error::Status(404, _)) => Ok(Fetched::NotFound),
             Err(ureq::Error::Status(code, _)) => Err(anyhow!("HTTP {}", code)),
