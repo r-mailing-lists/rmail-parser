@@ -76,6 +76,8 @@ fn test_first_run_indexes_the_period_and_fetches_only_the_pages_it_needs() {
             messages: 4,
             unlinked: 0,
             rejected: 0,
+            pending: 0,
+            confirmed: 0,
             periods_skipped: 0,
             stopped: None,
         }
@@ -907,6 +909,8 @@ fn test_a_fix_for_a_page_the_index_no_longer_lists_is_dropped() {
             fixes: [("000099".to_string(), "\u{ef}".to_string())].into(),
             // ... and page 000098, which had named another message.
             rejected: [("000098".to_string(), "gone@example.org".to_string())].into(),
+            pending: Vec::new(),
+            parents_rechecked: false,
         },
     )
     .unwrap();
@@ -1664,6 +1668,8 @@ fn test_a_period_file_that_gives_a_later_copy_a_page_is_indexed_again() {
         articles: vec![None, None, Some("000101".into()), Some("000102".into())],
         fixes: Default::default(),
         rejected: Default::default(),
+        pending: Vec::new(),
+        parents_rechecked: false,
     };
     stale.fixes.insert("000101".into(), "\u{ef}".into());
     sources::save(&out, &stale).unwrap();
@@ -1797,4 +1803,264 @@ fn test_messages_without_a_message_id_are_not_copies_of_each_other() {
         pages(&saved(&out, "2026-February")),
         [Some("000101"), Some("000102")]
     );
+}
+
+/// A reply as the text file has it: `raw_message` with an In-Reply-To.
+fn reply_message(n: usize, parent: usize, subject: &str, body: &str) -> String {
+    raw_message(n, subject, body).replace(
+        &format!("Message-ID: <m{n}@example.org>\n"),
+        &format!("Message-ID: <m{n}@example.org>\nIn-Reply-To: <m{parent}@example.org>\n"),
+    )
+}
+
+const ANSWER: &str = "A na?ve answer that is long enough to count.";
+const ANSWER_HTML: &str = "A na&#239;ve answer that is long enough to count.";
+
+/// A question and its answer, the answer with a character to restore.
+fn question_and_answer(raw: &Path) {
+    fs::write(
+        raw.join("2006-February.mbox"),
+        raw_message(1, "[Rd] Topic A", "A question, and some more words to it.")
+            + &reply_message(2, 1, "Re: [Rd] Topic A", ANSWER),
+    )
+    .unwrap();
+}
+
+fn question_and_answer_index(source: &mut FakeFetcher) {
+    source.serve(
+        "2006-February/date.html",
+        &index_page(&[("000101", "[Rd] Topic A"), ("000102", "Re: [Rd] Topic A")]),
+    );
+}
+
+#[test]
+fn test_an_old_page_that_names_the_parent_and_shows_the_text_is_the_message_s() {
+    let raw = scratch_dir("old-page-raw");
+    let out = scratch_dir("old-page-out");
+    question_and_answer(&raw);
+    let mut source = FakeFetcher::new();
+    question_and_answer_index(&mut source);
+    // Pages archived before about 2008 name the message answered.
+    source.serve(
+        "2006-February/000102.html",
+        &article_page("m1@example.org", ANSWER_HTML),
+    );
+
+    let report = run(&raw, &out, &mut source);
+
+    let file = saved(&out, "2006-February");
+    assert_eq!(pages(&file), [Some("000101"), Some("000102")]);
+    assert_eq!(file.fixes["000102"], "\u{ef}");
+    assert!(file.rejected.is_empty());
+    assert_eq!(report.mismatches, 0);
+}
+
+#[test]
+fn test_a_page_that_names_the_parent_but_shows_other_text_is_another_message_s() {
+    let raw = scratch_dir("old-page-other-raw");
+    let out = scratch_dir("old-page-other-out");
+    question_and_answer(&raw);
+    let mut source = FakeFetcher::new();
+    question_and_answer_index(&mut source);
+    source.serve(
+        "2006-February/000102.html",
+        &article_page(
+            "m1@example.org",
+            "Another message altogether, long enough to be a line.",
+        ),
+    );
+
+    run(&raw, &out, &mut source);
+
+    let file = saved(&out, "2006-February");
+    assert_eq!(pages(&file), [Some("000101"), None]);
+    assert_eq!(file.rejected["000102"], "m1@example.org");
+}
+
+#[test]
+fn test_a_rejection_for_naming_the_parent_is_looked_at_again_once() {
+    let raw = scratch_dir("recheck-raw");
+    let out = scratch_dir("recheck-out");
+    question_and_answer(&raw);
+    // What 0.13 wrote: the page named the question, so it was rejected.
+    let mut before = PeriodSources {
+        period: "2006-February".to_string(),
+        articles: vec![Some("000101".into()), None],
+        fixes: Default::default(),
+        rejected: Default::default(),
+        pending: Vec::new(),
+        parents_rechecked: false,
+    };
+    before
+        .rejected
+        .insert("000102".into(), "m1@example.org".into());
+    sources::save(&out, &before).unwrap();
+    let mut source = FakeFetcher::new();
+    question_and_answer_index(&mut source);
+    source.serve(
+        "2006-February/000102.html",
+        &article_page("m1@example.org", ANSWER_HTML),
+    );
+
+    run(&raw, &out, &mut source);
+
+    assert_eq!(
+        source.asked_paths(),
+        ["2006-February/date.html", "2006-February/000102.html"]
+    );
+    let file = saved(&out, "2006-February");
+    assert_eq!(pages(&file), [Some("000101"), Some("000102")]);
+    assert_eq!(file.fixes["000102"], "\u{ef}");
+    assert!(file.rejected.is_empty());
+
+    // Looked at once: the next run asks for nothing.
+    let mut source = FakeFetcher::new();
+    run(&raw, &out, &mut source);
+    assert!(source.asked.is_empty());
+}
+
+#[test]
+fn test_a_rejection_that_stands_after_a_second_look_is_not_looked_at_again() {
+    let raw = scratch_dir("recheck-stands-raw");
+    let out = scratch_dir("recheck-stands-out");
+    question_and_answer(&raw);
+    let mut before = PeriodSources {
+        period: "2006-February".to_string(),
+        articles: vec![Some("000101".into()), None],
+        fixes: Default::default(),
+        rejected: Default::default(),
+        pending: Vec::new(),
+        parents_rechecked: false,
+    };
+    before
+        .rejected
+        .insert("000102".into(), "m1@example.org".into());
+    sources::save(&out, &before).unwrap();
+    let mut source = FakeFetcher::new();
+    question_and_answer_index(&mut source);
+    source.serve(
+        "2006-February/000102.html",
+        &article_page(
+            "m1@example.org",
+            "Another message altogether, long enough to be a line.",
+        ),
+    );
+
+    run(&raw, &out, &mut source);
+    let file = saved(&out, "2006-February");
+    assert_eq!(pages(&file), [Some("000101"), None]);
+    assert!(file.parents_rechecked);
+
+    let mut source = FakeFetcher::new();
+    run(&raw, &out, &mut source);
+    assert!(source.asked.is_empty());
+}
+
+/// archived_twice()'s index as the source lists it, by date: the pages were
+/// numbered in reverse.
+fn twice_by_date(source: &mut FakeFetcher) {
+    source.serve(
+        "2026-February/date.html",
+        &index_page(&[
+            ("000105", "[Rd] Topic A"),
+            ("000104", "[Rd] Topic B"),
+            ("000103", "[Rd] Topic C"),
+            ("000102", "[Rd] Topic D"),
+            ("000101", "[Rd] Topic E"),
+        ]),
+    );
+}
+
+#[test]
+fn test_a_period_archived_twice_is_paired_by_date_and_linked_page_by_page_once_confirmed() {
+    let raw = scratch_dir("by-date-raw");
+    let out = scratch_dir("by-date-out");
+    fs::write(raw.join("2026-February.mbox"), archived_twice()).unwrap();
+    let mut source = FakeFetcher::new();
+    twice_by_date(&mut source);
+    for (number, n) in [("000105", 1), ("000104", 2), ("000102", 4), ("000101", 5)] {
+        source.serve(
+            &format!("2026-February/{number}.html"),
+            &article_page(&format!("m{n}@example.org"), "Plain text."),
+        );
+    }
+    // One page is another message's.
+    source.serve(
+        "2026-February/000103.html",
+        &article_page("m9@example.org", "Plain text."),
+    );
+
+    let report = run(&raw, &out, &mut source);
+
+    let file = saved(&out, "2026-February");
+    let mut expected = vec![
+        Some("000105"),
+        Some("000104"),
+        None,
+        Some("000102"),
+        Some("000101"),
+    ];
+    expected.extend([None; 5]);
+    assert_eq!(pages(&file), expected);
+    assert_eq!(file.rejected["000103"], "m9@example.org");
+    assert!(file.pending.is_empty(), "every pairing has been decided");
+    assert_eq!(
+        (report.confirmed, report.mismatches, report.pending),
+        (4, 1, 0)
+    );
+}
+
+#[test]
+fn test_a_pairing_by_date_has_no_link_until_its_page_has_been_seen() {
+    let raw = scratch_dir("by-date-budget-raw");
+    let out = scratch_dir("by-date-budget-out");
+    fs::write(raw.join("2026-February.mbox"), archived_twice()).unwrap();
+    let mut source = FakeFetcher::new();
+    twice_by_date(&mut source);
+    for (number, n) in [
+        ("000105", 1),
+        ("000104", 2),
+        ("000103", 3),
+        ("000102", 4),
+        ("000101", 5),
+    ] {
+        source.serve(
+            &format!("2026-February/{number}.html"),
+            &article_page(&format!("m{n}@example.org"), "Plain text."),
+        );
+    }
+    // The index and one page.
+    let opts = SourcesOptions {
+        max_requests: 2,
+        ..Default::default()
+    };
+
+    let report = run_sources(&raw, &out, BASE, &opts, &mut source).unwrap();
+
+    let file = saved(&out, "2026-February");
+    let mut expected = vec![Some("000105")];
+    expected.extend([None; 9]);
+    assert_eq!(pages(&file), expected);
+    assert_eq!(report.pending, 4);
+
+    // The next run goes on with the rest, and asks for no index.
+    let mut source2 = FakeFetcher::new();
+    for (number, n) in [("000104", 2), ("000103", 3), ("000102", 4), ("000101", 5)] {
+        source2.serve(
+            &format!("2026-February/{number}.html"),
+            &article_page(&format!("m{n}@example.org"), "Plain text."),
+        );
+    }
+    let report = run(&raw, &out, &mut source2);
+    assert!(!source2.asked_paths().contains(&"2026-February/date.html"));
+    let mut expected = vec![
+        Some("000105"),
+        Some("000104"),
+        Some("000103"),
+        Some("000102"),
+        Some("000101"),
+    ];
+    expected.extend([None; 5]);
+    assert_eq!(pages(&saved(&out, "2026-February")), expected);
+    assert_eq!(report.pending, 0);
 }

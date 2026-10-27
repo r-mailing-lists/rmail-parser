@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use rmail_parser::source_page::{decode_entities, fix_string, parse_article};
+use rmail_parser::source_index::parse_index_by_date;
+use rmail_parser::source_page::{decode_entities, fix_string, page_shows, parse_article};
 
 fn fixture(rel: &str) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -245,4 +246,46 @@ fn test_fix_string_does_not_guess_without_context() {
     );
     assert_eq!(fix_string("Bessel?s correction", ""), "?");
     assert_eq!(fix_string("no marks", "anything"), "");
+}
+
+#[test]
+fn test_a_page_shows_a_body_whose_lines_it_holds_with_question_marks_matching_anything() {
+    let body = "A na?ve answer that is long enough to count.\nAnd a second line, also long enough.\n> a quoted line that the page leaves out\nThanks,";
+    let page = "A na\u{ef}ve answer that is   long enough to count.\n\nAnd a second line, also long enough.";
+    assert!(page_shows(body, page));
+}
+
+#[test]
+fn test_a_page_with_other_text_does_not_show_the_body() {
+    let body = "A na?ve answer that is long enough to count.\nAnd a second line, also long enough.";
+    assert!(!page_shows(
+        body,
+        "Something else entirely, and long enough to be a line."
+    ));
+}
+
+#[test]
+fn test_half_the_lines_are_enough_since_addresses_are_written_differently() {
+    let body = "Write to someone at example.org about it, please.\nA na?ve answer that is long enough to count.";
+    let page = "Write to someone at example.org about it, please.\nA na\u{ef}ve answer, worded otherwise on the page.";
+    assert!(page_shows(body, page));
+}
+
+#[test]
+fn test_a_body_too_short_to_tell_shows_on_no_page() {
+    assert!(!page_shows("Thanks!", "Thanks!"));
+    assert!(page_shows(
+        "A short reply of a single long line.",
+        "A short reply of a single long line."
+    ));
+}
+
+#[test]
+fn test_the_index_by_date_keeps_the_order_the_page_lists() {
+    let html = "<LI><A HREF=\"000105.html\">A\n</A><I>x\n</I>\n<LI><A HREF=\"000101.html\">B\n</A><I>y\n</I>\n";
+    let numbers: Vec<String> = parse_index_by_date(html)
+        .into_iter()
+        .map(|e| e.number)
+        .collect();
+    assert_eq!(numbers, ["000105", "000101"]);
 }

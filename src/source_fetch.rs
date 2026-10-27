@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::io::Read;
 use std::path::Path;
 use std::thread;
@@ -12,8 +12,8 @@ use crate::mbox::split_mbox;
 use crate::message::{parse_message, Message};
 use crate::pipeline::{discover_mbox_files, read_file_lossy};
 use crate::source_align::align;
-use crate::source_index::{parse_index, subject_key, IndexEntry};
-use crate::source_page::{fix_string, parse_article, ArticlePage};
+use crate::source_index::{parse_index_by_date, subject_key, IndexEntry};
+use crate::source_page::{fix_string, page_shows, parse_article, ArticlePage};
 use crate::sources::{self, needs_page, period_of, period_sort_key, PeriodSources};
 
 const USER_AGENT: &str = "rmail-parser (+https://github.com/r-mailing-lists)";
@@ -220,6 +220,11 @@ pub struct SourcesReport {
     pub unlinked: usize,
     /// Rejected pairings in those same files, from this run or earlier.
     pub rejected: usize,
+    /// Pairings of periods archived more than once that wait for their page
+    /// to be fetched and found to be the message's (`PeriodSources::pending`).
+    pub pending: usize,
+    /// Pairings of that kind this run found to be right, and linked.
+    pub confirmed: usize,
     /// Older periods left alone because of `max_periods`.
     pub periods_skipped: usize,
     /// Why the run ended before every period was up to date, if it did.
@@ -402,24 +407,40 @@ fn update_period(
             .map(|msg| msg.as_ref().map(|msg| msg.message_id.as_str())),
     );
     let firsts: Vec<usize> = (0..raw_messages.len()).filter(|&i| !later[i]).collect();
+    // The messages the period's messages answer, as a page archived before
+    // about 2008 names them.
+    let parents: HashSet<&str> = parsed
+        .iter()
+        .flatten()
+        .filter_map(|msg| msg.in_reply_to.as_deref())
+        .map(bare_id)
+        .collect();
 
     let mut current = match sources::load(out_dir, period)? {
         Some(known)
             if known.articles.len() == raw_messages.len()
+                && (known.pending.is_empty() || known.pending.len() == raw_messages.len())
                 && !known
                     .articles
                     .iter()
                     .zip(&later)
-                    .any(|(a, later)| *later && a.is_some()) =>
+                    .any(|(a, later)| *later && a.is_some())
+                && (known.parents_rechecked
+                    || !known
+                        .rejected
+                        .values()
+                        .any(|named| parents.contains(named.as_str()))) =>
         {
             known
         }
-        // No file yet, the raw file has changed length since, or the file
-        // gives a later copy a page, as versions before 0.13.0 could: index it.
+        // No file yet, the raw file has changed length since, the file gives
+        // a later copy a page, as versions before 0.13.0 could, or it rejects
+        // a page for naming a message's parent, as versions before 0.14.0
+        // could: index it.
         stale => {
             let url = format!("{}/{}/date.html", base, period);
-            let index = match budget.ask(&url, non_empty_index) {
-                Asked::Got(index) => index,
+            let (index, by_date) = match budget.ask(&url, non_empty_index) {
+                Asked::Got(both) => both,
                 // No index, so nothing is known about this period: its file
                 // is left as it is, or left unwritten, and the index is
                 // asked for again on a later run.
@@ -466,6 +487,19 @@ fn update_period(
             };
             fixes.retain(|number, _| listed.contains(number.as_str()));
             rejected.retain(|number, _| listed.contains(number.as_str()));
+            // A page archived before about 2008 names in its reply link the
+            // message its own message answers. A rejection for naming the
+            // parent of the message it is paired with again was such a page:
+            // the pairing stands, and the page is fetched again and judged by
+            // its text (`other_message_named`).
+            for (i, article) in articles.iter().enumerate() {
+                if let (Some(number), Some(msg)) = (article, &parsed[i]) {
+                    let parent = msg.in_reply_to.as_deref().map(bare_id);
+                    if parent.is_some() && rejected.get(number).map(String::as_str) == parent {
+                        rejected.remove(number);
+                    }
+                }
+            }
             // A page that has said whose it is goes to that message only.
             // Pairing by subject would otherwise hand it back to the message
             // it was taken from, and nothing would look at it again.
@@ -485,21 +519,33 @@ fn update_period(
             // as often as they find none. When more than a fifth of them
             // find none, the order is not the raw file's, and the period
             // gets no links at all: no link is better than a wrong one.
+            //
+            // Such a period's messages are paired again in the order the index
+            // lists its pages, which is by date, and each pairing waits in
+            // `pending` until its page has been fetched and found to be the
+            // message's.
             let unlinked = firsts.iter().filter(|&&i| articles[i].is_none()).count();
+            let mut pending = Vec::new();
             if firsts.len() < raw_messages.len() && unlinked * 5 > firsts.len() {
+                articles.iter_mut().for_each(|article| *article = None);
+                pending = by_date_pairs(&firsts, &parsed, raw_messages, &by_date, &rejected);
                 eprintln!(
-                    "Note: {}: archived more than once, and {} of its {} messages found no page in the index's order; leaving the period without links",
+                    "Note: {}: archived more than once, and {} of its {} messages found no page in the index's order; {} paired by date, each linked once its page is found to be its own",
                     period,
                     unlinked,
-                    firsts.len()
+                    firsts.len(),
+                    pending.iter().filter(|p| p.is_some()).count()
                 );
-                articles.iter_mut().for_each(|article| *article = None);
             }
+            // Only a file with rejections needs to say they were looked at.
+            let parents_rechecked = !rejected.is_empty();
             let indexed = PeriodSources {
                 period: period.to_string(),
                 articles,
                 fixes,
                 rejected,
+                pending,
+                parents_rechecked,
             };
             save_period(out_dir, &indexed)?;
             indexed
@@ -509,31 +555,57 @@ fn update_period(
     let mut unsaved = 0;
     let mut stop = None;
     for (i, msg) in parsed.iter().enumerate() {
-        let (msg, number) = match (msg, current.articles.get(i)) {
-            (Some(msg), Some(Some(number))) => (msg, number.clone()),
+        let Some(msg) = msg else { continue };
+        // A linked message is fetched when its page may have a character to
+        // restore; a pairing that waits is fetched whatever its body needs,
+        // to see whether the page is the message's.
+        let linked = current.articles.get(i).cloned().flatten();
+        let waiting = current.pending.get(i).cloned().flatten();
+        let (number, confirming) = match (linked, waiting) {
+            (Some(number), _) => {
+                if current.fixes.contains_key(&number) || !needs_page(&msg.body_plain) {
+                    continue;
+                }
+                (number, false)
+            }
+            (None, Some(number)) => (number, true),
             _ => continue,
         };
-        if current.fixes.contains_key(&number) || !needs_page(&msg.body_plain) {
-            continue;
-        }
 
         let url = format!("{}/{}/{}.html", base, period, number);
         match budget.ask(&url, parse_article) {
             Asked::Got(page) => {
                 report.pages_fetched += 1;
-                if let Some(named) = other_message_named(&page, msg) {
+                let named = if confirming {
+                    current.pending[i] = None;
+                    not_its_page(&page, msg)
+                } else {
+                    other_message_named(&page, msg)
+                };
+                if let Some(named) = named {
                     eprintln!(
-                        "Warning: {}/{}.html is not the page of message {} in the raw file, unlinking it",
+                        "Warning: {}/{}.html is not the page of message {} in the raw file, {}",
                         period,
                         number,
-                        i + 1
+                        i + 1,
+                        if confirming {
+                            "leaving it unlinked"
+                        } else {
+                            "unlinking it"
+                        }
                     );
                     current.articles[i] = None;
                     // Written down, so that indexing the period again does
-                    // not pair the two a second time.
+                    // not pair the two a second time. Judged by this version,
+                    // which already looked at a parent the page may name.
                     current.rejected.insert(number, named);
+                    current.parents_rechecked = true;
                     report.mismatches += 1;
                 } else {
+                    if confirming {
+                        current.articles[i] = Some(number.clone());
+                        report.confirmed += 1;
+                    }
                     let fix = fix_string(&msg.body_plain, &page.text);
                     let restored = fix.chars().filter(|c| *c != '?').count();
                     report.chars_restored += restored;
@@ -558,6 +630,10 @@ fn update_period(
             unsaved = 0;
         }
     }
+    if current.pending.iter().all(Option::is_none) && !current.pending.is_empty() {
+        current.pending.clear();
+        unsaved += 1;
+    }
     if unsaved > 0 {
         save_period(out_dir, &current)?;
     }
@@ -572,6 +648,7 @@ fn tally(report: &mut SourcesReport, on_file: Option<&PeriodSources>) {
         report.messages += file.articles.len();
         report.unlinked += file.articles.iter().filter(|a| a.is_none()).count();
         report.rejected += file.rejected.len();
+        report.pending += file.pending.iter().filter(|p| p.is_some()).count();
     }
 }
 
@@ -585,14 +662,51 @@ fn save_period(out_dir: &Path, period: &PeriodSources) -> Result<()> {
 }
 
 /// An index with no entries, for a raw file that has messages, is an error
-/// page or a page cut short, not an index.
-fn non_empty_index(html: &str) -> Option<Vec<IndexEntry>> {
-    let index = parse_index(html);
-    if index.is_empty() {
-        None
-    } else {
-        Some(index)
+/// page or a page cut short, not an index. The entries by page number, and
+/// as the page lists them, by date.
+fn non_empty_index(html: &str) -> Option<(Vec<IndexEntry>, Vec<IndexEntry>)> {
+    let by_date = parse_index_by_date(html);
+    if by_date.is_empty() {
+        return None;
     }
+    let mut by_number = by_date.clone();
+    by_number.sort_by_key(|e| e.number.parse::<u64>().unwrap_or(u64::MAX));
+    Some((by_number, by_date))
+}
+
+/// Pairs the first copies of a period archived more than once with its
+/// index in the order the index lists them, by date: the first copies are
+/// taken in the order of their Date, and a message that does not parse is
+/// left out. One entry per raw message, as `articles` has. A page that has
+/// said whose it is goes to no other message.
+fn by_date_pairs(
+    firsts: &[usize],
+    parsed: &[Option<Message>],
+    raw_messages: &[&str],
+    by_date: &[IndexEntry],
+    rejected: &BTreeMap<String, String>,
+) -> Vec<Option<String>> {
+    let mut order: Vec<usize> = firsts
+        .iter()
+        .copied()
+        .filter(|&i| parsed[i].is_some())
+        .collect();
+    order.sort_by_key(|&i| (parsed[i].as_ref().map(|msg| msg.date), i));
+    let keys: Vec<String> = order
+        .iter()
+        .map(|&i| subject_key(&raw_subject(raw_messages[i])))
+        .collect();
+    let mut pending = vec![None; raw_messages.len()];
+    for (&i, article) in order.iter().zip(align(&keys, by_date)) {
+        if let Some(number) = article {
+            let own = parsed[i].as_ref().map(own_message_id);
+            match rejected.get(&number) {
+                Some(named) if Some(named.as_str()) != own => {}
+                _ => pending[i] = Some(number),
+            }
+        }
+    }
+    pending
 }
 
 /// The Subject of a raw message, read the way `parse_message` reads it but
@@ -609,20 +723,61 @@ fn raw_subject(raw: &str) -> String {
         .unwrap_or_default()
 }
 
+/// A Message-ID without its angle brackets, as a page names it.
+fn bare_id(id: &str) -> &str {
+    id.trim().trim_start_matches('<').trim_end_matches('>')
+}
+
 /// A message's own Message-ID, without angle brackets, as a page names it.
 fn own_message_id(msg: &Message) -> &str {
-    msg.message_id
-        .trim()
-        .trim_start_matches('<')
-        .trim_end_matches('>')
+    bare_id(&msg.message_id)
 }
 
 /// The Message-ID the page names, when it names one and it is not this
 /// message's. `None` when the page is this message's, or cannot say.
+///
+/// A page archived before about 2008 names in its reply link the message
+/// its own message answers. A page that names this message's parent is taken
+/// for its own when it shows its text (`page_shows`).
 fn other_message_named(page: &ArticlePage, msg: &Message) -> Option<String> {
     let own = own_message_id(msg);
     match &page.message_id {
-        Some(id) if !own.is_empty() && id != own => Some(id.clone()),
+        Some(id) if !own.is_empty() && id != own => {
+            let parent = msg.in_reply_to.as_deref().map(bare_id);
+            if parent == Some(id.as_str()) && page_shows(&msg.body_plain, &page.text) {
+                None
+            } else {
+                Some(id.clone())
+            }
+        }
         _ => None,
+    }
+}
+
+/// For a pairing that waits to be confirmed: the Message-ID to reject the
+/// page with, unless the page is shown to be this message's. A page that
+/// names this message is its; one that names no message, or the one it
+/// answers, is when it shows its text. Every other page is another's, and
+/// so is one that cannot say and does not show it ("" when it named none).
+fn not_its_page(page: &ArticlePage, msg: &Message) -> Option<String> {
+    let own = own_message_id(msg);
+    let parent = msg.in_reply_to.as_deref().map(bare_id);
+    match page.message_id.as_deref() {
+        Some(id) if !own.is_empty() && id == own => None,
+        Some(id) if parent == Some(id) || own.is_empty() => {
+            if page_shows(&msg.body_plain, &page.text) {
+                None
+            } else {
+                Some(id.to_string())
+            }
+        }
+        Some(id) => Some(id.to_string()),
+        None => {
+            if page_shows(&msg.body_plain, &page.text) {
+                None
+            } else {
+                Some(String::new())
+            }
+        }
     }
 }
