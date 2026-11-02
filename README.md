@@ -1,6 +1,6 @@
 # rmail-parser
 
-Parses the monthly text files of a Mailman pipermail archive into structured JSON: one file per month with every message and thread, plus list statistics and a contributor index. It is the parser behind the [R mailing list archives](https://r-mailing-lists.thecoatlessprofessor.com).
+Parses the monthly text files of a Mailman pipermail archive into structured JSON: one file per month with every message and thread, plus list statistics and a contributor index. It is the parser behind the [R mailing list archives](https://archives.rstats.dev).
 
 ## Install
 
